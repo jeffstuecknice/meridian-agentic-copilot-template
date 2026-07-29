@@ -13,3 +13,6 @@ node_modules/
 # OS noise
 .DS_Store
 Thumbs.db
+
+# local scratch — Studio scripts etc. dropped in the workspace, never template content
+SkywayDigitalChatScript*.json
