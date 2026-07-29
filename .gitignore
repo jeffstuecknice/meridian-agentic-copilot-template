@@ -1,0 +1,15 @@
+# secrets — never commit credentials (FTP, API keys, bearer tokens)
+secrets*
+*.key
+*_token*
+ftp_credentials*
+
+# build junk
+__pycache__/
+*.pyc
+_build_tmp/
+node_modules/
+
+# OS noise
+.DS_Store
+Thumbs.db
