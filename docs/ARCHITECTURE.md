@@ -27,10 +27,10 @@ start
      ├─ postback: approve     → EXEC MAP (code: recId+params → action plan)
      │                          → httpRequest chain (mock API: return / credit / order / sms)
      │                          → EXEC RESULT (code: collect real refs)
-     │                          → sendData {execStr} → end-turn                     ★ ~1–2 s, zero LLM calls
-     ├─ postback: ask         → native KNOWLEDGE SEARCH → ONE mini LLM → sendData {askStr} → end-turn
+     │                          → sendData {merExecStr} → end-turn                  ★ ~1–2 s, zero LLM calls
+     ├─ postback: ask         → native KNOWLEDGE SEARCH → ONE mini LLM → sendData {merAskStr} → end-turn
      ├─ postback: command     → COMMAND AGENT (small aiAgentJob, the action-tool registry)
-     │                          → sendData {execStr} → end-turn                     ★ the agentic-execution showcase
+     │                          → sendData {merExecStr} → end-turn                  ★ the agentic-execution showcase
      └─ customer/agent turn   → CONVO BUILD (code; filters "Begin Conversation"; agent utterances tagged)
                                 → GATE (mini LLM: route + live sentiment from a 6-turn tail)
                                 → sentiment push (only on ≥5-pt/label change)
@@ -40,7 +40,7 @@ start
                                                      → native KNOWLEDGE SEARCH (policy)
                                                      → POLICY ANALYST (one GPT call → findings JSON, verbatim quotes)
                                                      → COMPOSER (mini LLM → full panel state; retry-guarded)
-                                                     → MERGE (code, masking-safe) → sendData {panelStr} → end-turn
+                                                     → MERGE (code, masking-safe) → sendData {merStateStr} → end-turn
 ```
 
 Control flow is **topological** — Cognigy `end` nodes do not halt a turn, and switch branches fall
@@ -49,9 +49,11 @@ through to the switch's next sibling, so the branch order above is load-bearing 
 ### The two execution paths, on purpose
 
 - **Approve (deterministic):** the panel's recommendation cards are built by the composer with a
-  machine-readable `exec` block (`{recId, actions:[{tool, params…}]}`). The Approve postback echoes it
-  back; a code node maps it to `httpRequest` calls; the mock API returns **real confirmation refs**
-  (`RMA-…`, `CR-…`, `ORD-…`); `sendData` animates them onto the card. No LLM, no stale context, ~1–2 s.
+  machine-readable `exec` block: `exec: {actions: [{action, params}, …]}` (up to 6 system calls per
+  beat, in order). The Approve postback echoes it back as `{action:'approve', recId, exec}`; a code
+  node validates the plan against the action whitelist and makes ONE `execute_batch` HTTP call; the
+  mock API returns **real confirmation refs** (`RMA-…`, `CR-…`, `ORD-…`); `sendData` animates them
+  onto the card. No LLM, no stale context, ~1–2 s.
 - **Command bar (agentic):** free-text agent commands ("also text her the receipt") go to a small
   execution aiAgentJob with the parameterized tool registry. This preserves the *AI-executes* teaching
   showcase where it earns its keep — unplanned actions — without ever putting an LLM between an
@@ -80,13 +82,33 @@ comparison in hand.
 
 ## 4. Tile ↔ flow contract
 
-- **Flow → tile:** the composer's panel object is JSON-stringified + escaped by a code node and shipped
-  as `sendData {"panelStr": "…"}`; the tile does `JSON.parse` and replaces state. Execute results push
-  `{"execStr": …}`; knowledge answers `{"askStr": …}`; sentiment `{"sentimentStr": …}`. (sendData arrives
-  wrapped as `e.data.metadata.<key>` — the tile unwraps.)
-- **Tile → flow:** official `SDK.postback({action, …payload})` — arrives as
-  `input.data._cognigy._agentAssist = {type:'submit', payload}`; the ROUTER decodes it. Inline `onclick`
-  handlers fail in the tile sandbox — wire with `addEventListener` only.
+- **Flow → tile** (all on `tileId: meridian-copilot-tile`; sendData arrives wrapped as
+  `e.data.metadata.<key>` — the tile unwraps; every value is an escaped JSON string the tile
+  `JSON.parse`s; an empty string = no-op):
+
+  | key | payload | when |
+  |---|---|---|
+  | `merStateStr` | the full panel object (see §4a) | pre-panel, every composed panel, rehydrate each turn |
+  | `merExecStr` | `{recId, ok, narration, executed:[{action, ref, ok, summary, receiptUrl?, total?}]}` | after Approve or a command finishes |
+  | `merAskStr` | `{askId, title, answer, tell, sources:[{id,title}], escalate, escalateNote}` | knowledge answers (ask postback + auto-question) |
+  | `merSentStr` | `{pct, label, note}` | live sentiment, only on ≥5-pt/label change |
+  | `merConvoStr` | `{transcript:[{role,text}], customer:{customer_id,nickname}}` | every message turn |
+  | `merGreet` | a suggested instant-greeting string | pre-panel turns only (before the first panel) |
+
+- **Tile → flow:** official `SDK.postback(payload)` — arrives as
+  `input.data._cognigy._agentAssist = {type:'submit', payload}`; the ROUTER switches on
+  `payload.action`. The three routed payloads: `{action:'approve', recId, exec:{actions:[{action,
+  params}]}}` (echo the beat's exec block verbatim), `{action:'ask', query, askId?}`,
+  `{action:'command', command}`. `{action:'boot'}` deliberately has no router case — it rides the
+  default chain so rehydrate + the briefing run on tile mount. Inline `onclick` handlers fail in the
+  tile sandbox — wire with `addEventListener` only.
+
+### 4a. Panel object (what `merStateStr` carries)
+
+`{profile, context, needs:[{id,label,quote,weight}], comparison:{intro, products:[2 ranked cards with
+fit[] verdicts + an honest tradeoff]}, attempted, customerAsks, nextStepsIntro, recommendations:[beats
+with say/sayDone/detail/running/substeps/exec/policyQuote], draftMessage}` — the composer prompt in
+`package/build_meridian.py` is the authoritative field-by-field contract.
 - The tile is a **pure data-driven display**. It never reasons, never calls LLMs, and renders whatever
   the flow sends. It renders only in real CXone Agent Workspace (not Cognigy's Interaction Panel — the
   flow still runs there, which is how you test the brain).
