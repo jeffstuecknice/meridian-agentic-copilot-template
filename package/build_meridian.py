@@ -755,10 +755,15 @@ def _p(props, required):
 # ═════════════════════════ build ═════════════════════════
 
 def build():
+    # --no-ks: omit the bundled knowledgeStore record. Use for RE-imports into a project whose
+    # Meridian_Knowledge store already exists (same-project imports remap _ids, so re-shipping the
+    # store would DUPLICATE it; the KS-search nodes bind by referenceId, which survives).
+    include_ks = '--no-ks' not in sys.argv
     build_root = tempfile.mkdtemp(prefix='merbuild_')
     pkg = os.path.join(build_root, PKG_NAME)
-    for d in ('flow', 'chart', 'nodeData', 'locale', 'flowSettings', 'flowState',
-              'intentTrainGroup', 'aiAgent', 'knowledgeStore'):
+    folders = ['flow', 'chart', 'nodeData', 'locale', 'flowSettings', 'flowState',
+               'intentTrainGroup', 'aiAgent'] + (['knowledgeStore'] if include_ks else [])
+    for d in folders:
         os.makedirs(os.path.join(pkg, d))
 
     def dump(sub, _id, obj):
@@ -779,11 +784,12 @@ def build():
                             'createdAt': EPOCH, 'lastChanged': EPOCH, 'createdBy': USER, 'lastChangedBy': USER})
 
     # knowledge store — bundled so ONE import creates it; upload knowledge/upload/*.txt afterwards
-    dump('knowledgeStore', KS_ID, {'_id': KS_ID, 'referenceId': KS_REF, 'name': 'Meridian_Knowledge',
-                                   'language': 'en-US', 'status': 'ready', 'documents': [],
-                                   'projectReference': PROJECT, 'organisationReference': ORG,
-                                   'createdBy': USER, 'createdAt': EPOCH,
-                                   'lastChangedBy': USER, 'lastChanged': EPOCH})
+    if include_ks:
+        dump('knowledgeStore', KS_ID, {'_id': KS_ID, 'referenceId': KS_REF, 'name': 'Meridian_Knowledge',
+                                       'language': 'en-US', 'status': 'ready', 'documents': [],
+                                       'projectReference': PROJECT, 'organisationReference': ORG,
+                                       'createdBy': USER, 'createdAt': EPOCH,
+                                       'lastChangedBy': USER, 'lastChanged': EPOCH})
 
     # flow + chart scaffolding
     dump('flow', FLOW, {'_id': FLOW, 'referenceId': FLOW_REF, 'name': FLOW_NAME,
@@ -1010,9 +1016,16 @@ def build():
         return {'_id': det_uuid('rel:' + nid).replace('-', '')[:24], 'node': nid, 'next': nxt,
                 'children': children or []}
 
+    # ⚠ GRID DISCOVERABILITY (live-debugged 2026-07-30): CXone's copilot socket does a session-start
+    # PRE-WALK of the flow to find setAgentAssistGrid. With the grid buried in the router's LAST child
+    # branch the pre-walk finds nothing -> config:null -> NO Copilot tab at all (profile/script/endpoint
+    # all correct). The working password-reset flow has grid+tile FIRST on the main chain — so: the
+    # once/grid/tile mount sits BEFORE the router, and the default branch is the router's FIRST child.
     rels = [
-        rel(START, ROUTER),
-        rel(ROUTER, None, children=[C_APPR, C_ASK, C_CMD, DEF_R]),
+        rel(START, ONCE),
+        rel(ONCE, ROUTER, children=[ONFIRST, AFTERW]),
+        rel(ONFIRST, GRID), rel(GRID, TILE), rel(TILE, None), rel(AFTERW, None),
+        rel(ROUTER, None, children=[DEF_R, C_APPR, C_ASK, C_CMD]),
         # approve
         rel(C_APPR, X_MAP), rel(X_MAP, X_SW),
         rel(X_SW, None, children=[X_GO, X_BAD]),
@@ -1029,10 +1042,8 @@ def build():
         rel(CM_DEF, None),
         rel(CT_HTTP, CT_RES), rel(CT_RES, CT_ANS), rel(CT_ANS, None),
         rel(CM_FIN, CM_SEND), rel(CM_SEND, None),
-        # default message turn
-        rel(DEF_R, ONCE),
-        rel(ONCE, GREET_P, children=[ONFIRST, AFTERW]),
-        rel(ONFIRST, GRID), rel(GRID, TILE), rel(TILE, None), rel(AFTERW, None),
+        # default message turn (once/grid/tile now mounts on the main chain, before the router)
+        rel(DEF_R, GREET_P),
         rel(GREET_P, GREET_S), rel(GREET_S, CONVO_B),
         rel(CONVO_B, CONVO_S), rel(CONVO_S, REHYD), rel(REHYD, CRM_P),
         rel(CRM_P, CRM_SW),
@@ -1076,8 +1087,7 @@ def build():
         return isinstance(x, str) and len(x) == 24 and all(c in '0123456789abcdef' for c in x)
     problems = []
     nodes = set(os.listdir(os.path.join(pkg, 'nodeData')))
-    for sub in ('nodeData', 'flow', 'chart', 'locale', 'flowSettings', 'flowState',
-                'intentTrainGroup', 'aiAgent', 'knowledgeStore'):
+    for sub in folders:
         for fn in os.listdir(os.path.join(pkg, sub)):
             if not hexok(fn):
                 problems.append(f'{sub}/{fn} not 24-hex')
@@ -1120,15 +1130,23 @@ def build():
                 problems.append(f'searchExtractOutput {fn} config truncated ({len(cfg.keys())} keys)')
             if cfg.get('knowledgeStoreId') != KS_REF:
                 problems.append(f'searchExtractOutput {fn} not bound to the bundled store')
+    # grid discoverability — the session-start pre-walk must hit setAgentAssistGrid on the
+    # first-child chain right after Start, or the Copilot tab never mounts (2026-07-30).
+    rmap = {r['node']: r for r in c['relations']}
+    if not (rmap[START]['next'] == ONCE and (rmap[ONCE].get('children') or [None])[0] == ONFIRST
+            and rmap[ONFIRST]['next'] == GRID and rmap[GRID]['next'] == TILE):
+        problems.append('grid/tile mount is not first-chain-discoverable from Start (pre-walk would miss it)')
     if problems:
         print('VALIDATION FAILED:')
         for p in problems:
             print('  -', p)
         sys.exit(1)
-    print('VALIDATION: OK  (%d nodes, 1 flow, 1 aiAgent, 1 knowledgeStore)' % len(nodes))
+    print('VALIDATION: OK  (%d nodes, 1 flow, 1 aiAgent%s)' % (
+        len(nodes), ', 1 knowledgeStore' if include_ks else ', KS OMITTED (--no-ks re-import build)'))
 
     # ── zip (POSIX paths; temp dir keeps OneDrive from locking the exploded tree) ──
-    out_zip = os.path.join(os.path.dirname(os.path.abspath(__file__)), PKG_NAME + '.zip')
+    out_zip = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           PKG_NAME + ('' if include_ks else '-noKS') + '.zip')
     n = 0
     with zipfile.ZipFile(out_zip, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
         for root, _, files in os.walk(pkg):

@@ -22,6 +22,9 @@ policy clause, order ref). Executing it is a mapping problem, not a reasoning pr
 
 ```
 start
+ └─ ONCE (first turn only: setAgentAssistGrid → Copilot tile shell) — MUST be first on the main
+ │   chain: CXone's copilot socket pre-walks the flow at session start to find the grid config;
+ │   a grid buried in a later router branch = config:null = NO Copilot tab at all (live-debugged)
  └─ ROUTER (code) — classifies the turn, sets context.route
      ├─ postback: boot        → REHYDRATE (cached panel? push it) → CRM httpRequest → instant PRE-PANEL push → end-turn
      ├─ postback: approve     → EXEC MAP (code: recId+params → action plan)
