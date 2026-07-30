@@ -76,11 +76,19 @@
     return false;
   }
 
+  /* Payloads can arrive with ONE extra escape level depending on channel version
+   * (observed live 2026-07-30) — parse, and on failure unescape once and retry. */
+  function jparse(val) {
+    if (typeof val !== 'string') return val;
+    try { return JSON.parse(val); } catch (e) { /* retry unescaped */ }
+    return JSON.parse(val.replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+  }
+
   /* ---------- summaries per key ---------- */
   function summarize(key, val) {
     try {
       if (key === 'merStateStr') {
-        var p = JSON.parse(val);
+        var p = jparse(val);
         gotPanel = true;
         var recs = (p.recommendations || []).map(function (r) { return (r.status === 'done' ? '✓ ' : r.status === 'active' ? '▶ ' : '· ') + r.label; });
         return '<b>' + ((p.profile && p.profile.name) || '?') + '</b> (' + ((p.profile && p.profile.tier) || '—') + ') · needs: ' +
@@ -88,13 +96,13 @@
           ' · comparison: ' + (p.comparison && p.comparison.products ? p.comparison.products.map(function (x) { return '#' + x.rank + ' ' + x.name; }).join(' / ') : 'none yet') +
           '<br>beats: ' + (recs.join(' | ') || 'none yet');
       }
-      if (key === 'merSentStr') { var s = JSON.parse(val); return s.pct + '% — ' + s.label + ' (' + (s.note || '') + ')'; }
-      if (key === 'merAskStr') { var a = JSON.parse(val); return '<b>' + a.title + '</b>: ' + a.answer + (a.sources && a.sources.length ? ' [' + a.sources.map(function (x) { return x.id; }).join(', ') + ']' : ''); }
+      if (key === 'merSentStr') { var s = jparse(val); return s.pct + '% — ' + s.label + ' (' + (s.note || '') + ')'; }
+      if (key === 'merAskStr') { var a = jparse(val); return '<b>' + a.title + '</b>: ' + a.answer + (a.sources && a.sources.length ? ' [' + a.sources.map(function (x) { return x.id; }).join(', ') + ']' : ''); }
       if (key === 'merExecStr') {
-        var x = JSON.parse(val);
+        var x = jparse(val);
         return x.narration + '<br>' + (x.executed || []).map(function (e) { return (e.ok ? '✓ ' : '✗ ') + e.summary + (e.ref ? ' · ' + e.ref : ''); }).join('<br>');
       }
-      if (key === 'merConvoStr') { var c = JSON.parse(val); return (c.transcript || []).length + ' turns · customer: ' + ((c.customer && (c.customer.nickname || c.customer.customer_id)) || '—'); }
+      if (key === 'merConvoStr') { var c = jparse(val); return (c.transcript || []).length + ' turns · customer: ' + ((c.customer && (c.customer.nickname || c.customer.customer_id)) || '—'); }
       if (key === 'merGreet') { return String(val); }
     } catch (e) { return '<span class="wait">received but failed to parse: ' + String(e) + '</span>'; }
     return String(val).slice(0, 200);

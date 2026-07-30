@@ -34,17 +34,28 @@ The hello tile also proves both directions: an echo row per customer message (fl
 
 ## Step 2 — the Copilot profile (where everything breaks)
 
-1. Create the profile — **type "Copilot" first → Save → configure → Save → switch to "Agentic" →
-   Save** (the save-bug dance). Set AI Agent = your webhook endpoint.
-2. **Assume the UI dropped config.** Run the repair (needs a fresh bearer token, ~1h life):
+⚠️ **A profile created directly as "Agentic" is DEFECTIVE AT BIRTH and cannot be repaired** — it's
+born `acdType: 'External'` with empty channels, and even after an API repair of every visible field
+it will never mount the Copilot tab (proven 2026-07-30: identical config, only the profile swapped,
+mounting followed the creation path). Delete such a profile; do not try to save it.
+
+**The proven creation recipe (Jeff's best practice, 2026-07-30):**
+
+1. Create a **regular "Copilot"** profile.
+2. Select the channels — **Voice and Digital/Text** — and select the sub-profiles as required.
+3. **Save.**
+4. Re-open the profile → change type to **"Agentic Copilot"** → select the **Cognigy webhook
+   endpoint** at that point.
+5. **Save.**
+6. **Always finish with the repair** (needs a fresh bearer token, ~1h life) — even a dance-born
+   profile drops `includeAgentUtterances`:
    ```
    set CC_TOKEN=<bearer>
    python tools/fix_profile.py <profile-name>
    ```
-   It fixes the four known drops: `channels: []`, missing `digitalChannel`/`voiceChannel`,
-   `includeAgentUtterances: false`, and `acdType: 'External'` (profiles born in the new AI Studio
-   UI get External; working profiles are Internal).
-3. **Never re-save a working profile in the UI.** If you must touch it, re-run `fix_profile.py` after.
+   It verifies/fixes: `channels`, `digitalChannel`/`voiceChannel`, `includeAgentUtterances`
+   (the copilot cannot hear the agent's side without it), and `acdType: 'Internal'`.
+7. **Never re-save a working profile in the UI.** If you must touch it, re-run `fix_profile.py` after.
 
 ## Step 3 — the routing chain
 
