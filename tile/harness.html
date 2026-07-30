@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Meridian tile — local harness</title>
+</head>
+<body>
+  <!-- mimics the flow's setHTMLTile shell: buffer + loader -->
+  <script>
+    window.__merBuf = window.__merBuf || [];
+    window.addEventListener('message', function (e) { if (!window.MER) window.__merBuf.push(e.data); });
+  </script>
+  <script src="meridian_tile.js"></script>
+  <script>
+    // Simulate the flow's pushes (what CXone delivers as e.data.metadata.<key>)
+    function push(key, val) { window.postMessage({ metadata: (function (o) { o[key] = val; return o; })({}) }, '*'); }
+
+    setTimeout(function () {
+      push('merGreet', 'Thanks, Maya — so glad you reached us. I can see your details and everything you told our assistant, so no need to repeat a thing.');
+      push('merConvoStr', JSON.stringify({ transcript: [{ role: 'customer', text: 'Hi! I\'m trying to pick a new laptop…' }], customer: { customer_id: 'cust_101', nickname: 'Maya' } }));
+      push('merSentStr', JSON.stringify({ pct: 62, label: 'Engaged, mildly wary', note: 'positive about the purchase' }));
+      push('merStateStr', JSON.stringify({
+        profile: { name: 'Maya Torres', tier: 'Summit' },
+        needs: [{ id: 'battery', label: 'All-day battery', quote: 'battery life is a big deal', weight: 'high' }, { id: 'portability', label: 'Café-portable', quote: 'work out of cafés', weight: 'high' }],
+        comparison: { intro: 'Ranked by your needs', products: [{ rank: 1, name: 'Aero 14' }, { rank: 2, name: 'Titan 16' }] },
+        recommendations: [{ id: 'greet', label: 'Greet Maya', status: 'done' }, { id: 'empathize', label: 'Acknowledge the return', status: 'active' }, { id: 'fix-return', label: 'Fix the ProDock return', status: 'pending' }]
+      }));
+      push('merAskStr', JSON.stringify({ askId: 'diag-1', title: 'Summit return window', answer: 'Summit members get a 45-day return window on accessories.', tell: 'Good news — as a Summit member you have 45 days.', sources: [{ id: 'MER-POL-02', title: 'Northlight Circle Loyalty' }], escalate: false }));
+      push('merExecStr', JSON.stringify({ recId: 'fix-return', ok: true, narration: 'Executed 2 actions with Northlight systems.', executed: [{ action: 'process_return_exception', ref: 'RMA-TEST1234', ok: true, summary: 'Return accepted — ProDock · $189 to store credit' }, { action: 'apply_credit', ref: 'CR-TEST5678', ok: true, summary: '$189 credit applied to the order' }] }));
+    }, 400);
+  </script>
+</body>
+</html>
