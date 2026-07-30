@@ -2,32 +2,378 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Meridian tile — local harness</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Meridian tile — scenario harness</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: 'Geist', 'Inter Tight', 'Segoe UI', system-ui, sans-serif;
+      background: #0B1626; color: #DCE6F2; font-size: 13px;
+      display: flex; height: 100vh; overflow: hidden;
+    }
+    .rail {
+      flex: 0 0 360px; display: flex; flex-direction: column;
+      border-right: 1px solid #1C3252; overflow: hidden;
+    }
+    .rail h1 { font-size: 14px; margin: 14px 14px 2px; }
+    .rail .sub { font-size: 11px; color: #7E93B2; margin: 0 14px 10px; line-height: 1.45; }
+    .btns { padding: 0 14px; overflow-y: auto; }
+    .btns button {
+      display: block; width: 100%; text-align: left; margin-bottom: 6px;
+      background: #12233C; color: #DCE6F2; border: 1px solid #1F3A61;
+      border-radius: 8px; padding: 8px 11px; font-size: 12px; font-family: inherit;
+      cursor: pointer;
+    }
+    .btns button:hover { background: #1A3153; }
+    .btns button b { color: #7FB5F5; margin-right: 6px; }
+    .btns .note { font-size: 10px; color: #64789A; margin: -2px 0 8px 2px; line-height: 1.4; }
+    .log-h { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #64789A; margin: 10px 14px 6px; }
+    .log {
+      flex: 1 1 auto; min-height: 90px; margin: 0 14px 14px; padding: 8px 10px;
+      background: #060D18; border: 1px solid #1C3252; border-radius: 8px;
+      font-family: Consolas, monospace; font-size: 10.5px; line-height: 1.5;
+      overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: #9FDCAF;
+    }
+    .log .out { color: #E8C77A; }
+    .stage { flex: 1; display: flex; align-items: stretch; justify-content: center; padding: 14px; overflow: hidden; }
+    #mer-root {
+      width: 400px; max-width: 100%; background: #F4F7FA; border-radius: 12px;
+      overflow: hidden; box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+    }
+  </style>
 </head>
 <body>
-  <!-- mimics the flow's setHTMLTile shell: buffer + loader -->
+  <div class="rail">
+    <h1>Meridian tile — scenario harness</h1>
+    <div class="sub">Each button pushes a contract-exact payload the way CXone delivers it
+      (<code>e.data.metadata.&lt;key&gt;</code>, values as JSON strings). Run 1→12 for the full demo arc.</div>
+    <div class="btns" id="btns"></div>
+    <div class="log-h">Event log (postbacks ← tile · pushes → tile)</div>
+    <div class="log" id="log"></div>
+  </div>
+  <div class="stage"><div id="mer-root"></div></div>
+
+  <!-- The SDK simulator MUST exist before the tile script loads. -->
   <script>
+    var logEl = null;
+    function log(line, cls) {
+      if (!logEl) logEl = document.getElementById('log');
+      var d = document.createElement('div');
+      if (cls) d.className = cls;
+      d.textContent = new Date().toLocaleTimeString() + '  ' + line;
+      logEl.appendChild(d);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    window.SDK = {
+      postback: function (p) {
+        console.log('POSTBACK', JSON.stringify(p));
+        log('← postback ' + JSON.stringify(p), 'out');
+      }
+    };
+    // mimics the flow's setHTMLTile shell: buffer messages until window.MER exists
     window.__merBuf = window.__merBuf || [];
     window.addEventListener('message', function (e) { if (!window.MER) window.__merBuf.push(e.data); });
   </script>
   <script src="meridian_tile.js"></script>
-  <script>
-    // Simulate the flow's pushes (what CXone delivers as e.data.metadata.<key>)
-    function push(key, val) { window.postMessage({ metadata: (function (o) { o[key] = val; return o; })({}) }, '*'); }
 
-    setTimeout(function () {
-      push('merGreet', 'Thanks, Maya — so glad you reached us. I can see your details and everything you told our assistant, so no need to repeat a thing.');
-      push('merConvoStr', JSON.stringify({ transcript: [{ role: 'customer', text: 'Hi! I\'m trying to pick a new laptop…' }], customer: { customer_id: 'cust_101', nickname: 'Maya' } }));
-      push('merSentStr', JSON.stringify({ pct: 62, label: 'Engaged, mildly wary', note: 'positive about the purchase' }));
-      push('merStateStr', JSON.stringify({
-        profile: { name: 'Maya Torres', tier: 'Summit' },
-        needs: [{ id: 'battery', label: 'All-day battery', quote: 'battery life is a big deal', weight: 'high' }, { id: 'portability', label: 'Café-portable', quote: 'work out of cafés', weight: 'high' }],
-        comparison: { intro: 'Ranked by your needs', products: [{ rank: 1, name: 'Aero 14' }, { rank: 2, name: 'Titan 16' }] },
-        recommendations: [{ id: 'greet', label: 'Greet Maya', status: 'done' }, { id: 'empathize', label: 'Acknowledge the return', status: 'active' }, { id: 'fix-return', label: 'Fix the ProDock return', status: 'pending' }]
-      }));
-      push('merAskStr', JSON.stringify({ askId: 'diag-1', title: 'Summit return window', answer: 'Summit members get a 45-day return window on accessories.', tell: 'Good news — as a Summit member you have 45 days.', sources: [{ id: 'MER-POL-02', title: 'Northlight Circle Loyalty' }], escalate: false }));
-      push('merExecStr', JSON.stringify({ recId: 'fix-return', ok: true, narration: 'Executed 2 actions with Northlight systems.', executed: [{ action: 'process_return_exception', ref: 'RMA-TEST1234', ok: true, summary: 'Return accepted — ProDock · $189 to store credit' }, { action: 'apply_credit', ref: 'CR-TEST5678', ok: true, summary: '$189 credit applied to the order' }] }));
-    }, 400);
+  <script>
+    /* ------------------------------------------------------------------
+       Scenario payloads — these double as documentation of the contract.
+       Every value below is pushed exactly as the flow sends it: a JSON
+       string under e.data.metadata.<key>.
+       ------------------------------------------------------------------ */
+    function push(key, val) {
+      var meta = {};
+      meta[key] = (typeof val === 'string') ? val : JSON.stringify(val);
+      window.postMessage({ metadata: meta }, '*');
+      log('→ ' + key + ' (' + String(meta[key]).length + ' chars)');
+    }
+
+    // ---- shared fixtures (SCENARIO.md: Maya Torres, Aero 14 vs Titan 16) ----
+    var PROFILE = {
+      initials: 'MT', name: 'Maya Torres', nickname: 'Maya', tier: 'Summit',
+      phone: '(415) 555-0184', occupation: 'Freelance photographer & designer',
+      meta: 'Summit Circle · member since 2023',
+      rightLabel: 'Orders YTD', rightValue: '9',
+      stats: [{ k: 'Lifetime spend', v: '$7,420' }, { k: 'Points', v: '12,480' }],
+      badges: [
+        { t: 'Summit Circle', cls: 'plat' },
+        { t: 'Top-10% Spend', cls: 'good' },
+        { t: 'Open return dispute', cls: 'warn' }
+      ]
+    };
+
+    var PRE_PANEL = {
+      profile: PROFILE,
+      context: 'Maya is choosing between the Aero 14 and Titan 16. A ProDock docking-station return was denied in-store last week — an open sore point.',
+      needs: [], comparison: null,
+      attempted: [{ t: 'Verified Summit membership (3 years)', k: 'ok' }],
+      customerAsks: [],
+      nextStepsIntro: 'The AI Agent is reasoning over Northlight policy and the catalog…',
+      recommendations: []
+    };
+
+    var EMPATHIZE_SAY = 'I hear you on the docking station, Maya — let me look at that return right now, because after three years with us that is not the experience we want for you.';
+
+    var FULL_PANEL = {
+      profile: PROFILE,
+      context: 'Maya is picking between the Aero 14 and Titan 16 for photo editing on the move — café days, two flights a month, battery as the dealbreaker. She is still sore about the ProDock return the store denied last week (34 days after purchase).',
+      needs: [
+        { id: 'battery', label: 'All-day battery', quote: 'battery life is a big deal', weight: 'high' },
+        { id: 'portability', label: 'Light to carry', quote: 'I work out of cafés most days and fly about twice a month', weight: 'high' },
+        { id: 'photo', label: 'Photo editing', quote: 'I mostly edit photos', weight: 'med' },
+        { id: 'video', label: 'Occasional video', quote: 'some short video', weight: 'med' }
+      ],
+      comparison: {
+        intro: 'Ranked by what Maya said matters — not by the spec sheet.',
+        products: [
+          {
+            sku: 'NL-AERO-14', name: 'Aero 14', price: 1299, rank: 1, tag: 'Best fit for you',
+            headline: 'Everything Maya said matters most — battery, weight, photo work — is where the Aero leads.',
+            fit: [
+              { need: 'battery', verdict: 'wins', why: '18 hr vs 9 hr' },
+              { need: 'portability', verdict: 'wins', why: '2.7 lb vs 4.9 lb' },
+              { need: 'photo', verdict: 'wins', why: '2.8K 500-nit display, great for stills' },
+              { need: 'video', verdict: 'close', why: 'handles short video fine' }
+            ],
+            honest: 'The Titan 16 wins on raw power and has the SD-card slot a photographer would use daily — a $29 USB-C reader closes that gap on the Aero.'
+          },
+          {
+            sku: 'NL-TITAN-16', name: 'Titan 16', price: 1899, rank: 2, tag: 'The power option',
+            headline: 'Workstation-class power and the bigger 4K screen — but it trades away the battery Maya called her dealbreaker.',
+            fit: [
+              { need: 'battery', verdict: 'trails', why: '9 hr vs 18 hr' },
+              { need: 'portability', verdict: 'trails', why: '4.9 lb vs 2.7 lb' },
+              { need: 'photo', verdict: 'close', why: 'wide-gamut 4K is gorgeous, but overkill for stills' },
+              { need: 'video', verdict: 'wins', why: 'heavy video and 3D are its home turf' }
+            ],
+            honest: 'If Maya’s video work grows beyond short clips, the Titan is the machine she would not outgrow.'
+          }
+        ]
+      },
+      attempted: [
+        { t: 'Verified Summit membership (3 years)', k: 'ok' },
+        { t: 'Pulled the ProDock order — NL-20981, $189, 34 days ago', k: 'ok' }
+      ],
+      customerAsks: [
+        { ask: 'Help choosing Aero 14 vs Titan 16', resolved: false, resolution: '' },
+        { ask: 'Sore about the denied ProDock return', resolved: false, resolution: '' }
+      ],
+      nextStepsIntro: 'Guide Maya to the right laptop, then fix the return the store got wrong.',
+      recommendations: [
+        {
+          id: 'greet', label: 'Greet Maya', kind: 'talk', status: 'done',
+          say: 'Hi Maya — so glad you reached us. I can see your details and everything you told our assistant, so no need to repeat a thing.',
+          detail: 'She already briefed the assistant — never make her re-explain.'
+        },
+        {
+          id: 'empathize', label: 'Acknowledge the return frustration', kind: 'talk', status: 'active',
+          say: EMPATHIZE_SAY,
+          detail: 'Name the specific sore point before recommending anything.'
+        },
+        {
+          id: 'walk-comparison', label: 'Walk the comparison', kind: 'talk', status: 'pending',
+          say: 'Based on what you told me — café days, two flights a month, battery as the dealbreaker — the Aero 14 is the one I would pick for you. The one honest reason to still consider the Titan 16 is raw power and its SD slot, and a $29 reader covers that.',
+          detail: 'MER-POL-05 — recommend from stated needs, disclose the tradeoff.'
+        },
+        {
+          id: 'fix-return', label: 'Fix the ProDock return', kind: 'action', status: 'pending',
+          say: 'Good news on the docking station, Maya — as a Summit member you actually have a 45-day return window, so the store should have taken it. I am processing that return right now.',
+          sayDone: 'Maya, the ProDock return is accepted — $189 is back as store credit on your account, reference RMA-88214.',
+          detail: 'MER-POL-02 §3.1 — the Summit accessory window is 45 days; her purchase was 34 days ago.',
+          running: 'Checking policy & processing…',
+          substeps: [
+            'MER-POL-02 §3.1 — Summit: 45-day accessory return window',
+            'Processing the return exception on order NL-20981',
+            'Applying $189 to store credit'
+          ],
+          exec: {
+            actions: [
+              {
+                action: 'process_return_exception',
+                params: {
+                  orderRef: 'NL-20981', item: 'ProDock USB-C docking station', amount: '189',
+                  clause: 'MER-POL-02 §3.1', reason: 'Summit 45-day accessory window applied in error at store'
+                }
+              },
+              {
+                action: 'apply_credit',
+                params: { amount: '189', unit: 'USD', reason: 'ProDock return credit toward laptop purchase' }
+              }
+            ]
+          },
+          policyQuote: {
+            ruleId: 'MER-POL-02 §3.1',
+            quote: 'Summit members receive a 45-day accessory window on accessory returns, measured from the delivery date, for refund or store credit.',
+            source: 'Northlight Policy Library · Northlight Circle Loyalty (MER-POL-02)'
+          }
+        },
+        {
+          id: 'place-order', label: 'Place the Aero 14 order', kind: 'action', status: 'pending',
+          offer: true,
+          say: 'Shall I get the Aero 14 on its way, Maya? With your $189 credit applied it comes to $1,110, and it ships today.',
+          sayDone: 'Done, Maya — your Aero 14 is ordered at $1,110 after the credit, shipping today. Order ORD-55901.',
+          detail: 'MER-POL-03 §2 — the return credit may apply in the same conversation.',
+          running: 'Placing the order…',
+          substeps: [
+            'MER-POL-03 §2 — credit applies at purchase',
+            'Placing the Aero 14 order with the $189 credit',
+            'Confirming same-day shipping'
+          ],
+          exec: {
+            actions: [
+              { action: 'place_order', params: { sku: 'NL-AERO-14', creditApplied: '189', shipMethod: 'standard' } }
+            ]
+          },
+          policyQuote: {
+            ruleId: 'MER-POL-03 §2',
+            quote: 'Store credit issued from a return may be applied to a new purchase in the same transaction or conversation.',
+            source: 'Northlight Policy Library · Price Match & Credits (MER-POL-03)'
+          }
+        },
+        {
+          id: 'send-receipt', label: 'Send the receipt', kind: 'action', status: 'pending',
+          say: 'I will send you a full receipt of everything we did today, Maya.',
+          sayDone: 'Maya, your receipt is ready — I am pasting the link into our chat now.',
+          detail: 'Wraps the conversation with every reference in one place.',
+          running: 'Building the receipt…',
+          substeps: ['Collecting today’s references', 'Building the receipt page', 'Creating the short link'],
+          exec: {
+            actions: [
+              {
+                action: 'send_receipt',
+                params: {
+                  name: 'Maya Torres',
+                  detail: 'ProDock return accepted — RMA-88214|$189 credit applied — CR-10387|Aero 14 ordered — ORD-55901',
+                  total: '1110', orderRef: 'ORD-55901'
+                }
+              }
+            ]
+          }
+        }
+      ],
+      draftMessage: 'Maya, here’s everything from today in one place: your ProDock return is accepted with $189 back as store credit, your new Aero 14 is ordered at $1,110 after that credit, and it ships today. Your receipt: <receipt link>. Thank you for three great years with Northlight — enjoy the new machine!'
+    };
+
+    var SCENARIOS = [
+      {
+        n: 1, label: 'Boot / skeleton (reload)',
+        note: 'Reloads the page: skeleton + “AI Agent is reviewing…” + {action:\'boot\'} retries in the log.',
+        run: function () { location.reload(); }
+      },
+      {
+        n: 2, label: 'Pre-panel (profile only, empty recommendations)',
+        note: 'Profile + context render; the playbook slot shows the cycling thinking card.',
+        run: function () { push('merStateStr', PRE_PANEL); }
+      },
+      {
+        n: 3, label: 'Full panel — Turn 1 (needs + comparison + playbook)',
+        note: 'The showpiece: needs chips, ranked cards with honest tradeoffs, the MER-POL-02 return beat, offer-gated place_order (offer:true — Approve unlocks on Maya’s yes), send_receipt.',
+        run: function () { push('merStateStr', FULL_PANEL); }
+      },
+      {
+        n: 4, label: 'Sentiment dip — 38% frustrated',
+        run: function () {
+          push('merSentStr', { pct: 38, label: 'Frustrated', note: 'The denied ProDock return still stings — three years a member.' });
+        }
+      },
+      {
+        n: 5, label: 'Sentiment recovers — 82%',
+        run: function () {
+          push('merSentStr', { pct: 82, label: 'Relieved & pleased', note: 'The agent owned the return problem and is fixing it.' });
+        }
+      },
+      {
+        n: 6, label: 'Convo: agent SAYS the empathize line (HEARD moment)',
+        note: 'Green “AI Agent heard this” banner ~2s, then the slow fold; the next beat activates.',
+        run: function () {
+          push('merConvoStr', {
+            transcript: [
+              { role: 'customer', text: 'Before I buy anything though — I’m still annoyed about that docking station I tried to return last week.' },
+              { role: 'agent', text: EMPATHIZE_SAY }
+            ],
+            customer: { customer_id: 'cust_101', nickname: 'Maya' }
+          });
+        }
+      },
+      {
+        n: 7, label: 'Exec result — fix-return (RMA-88214 / CR-10387)',
+        note: 'Click Approve on “Fix the ProDock return” first to see in-flight → refs land.',
+        run: function () {
+          push('merExecStr', {
+            recId: 'fix-return', ok: true,
+            narration: 'Executed 2 actions with Northlight systems.',
+            executed: [
+              { action: 'process_return_exception', ref: 'RMA-88214', ok: true, summary: 'Return accepted — ProDock USB-C docking station · $189 to store credit' },
+              { action: 'apply_credit', ref: 'CR-10387', ok: true, summary: '$189 credit applied to the order' }
+            ]
+          });
+        }
+      },
+      {
+        n: 8, label: 'Exec result — send_receipt (receiptUrl)',
+        note: 'Confirm + approve the receipt beat first; the link renders copyable.',
+        run: function () {
+          push('merExecStr', {
+            recId: 'send-receipt', ok: true,
+            narration: 'Executed 1 action with Northlight systems.',
+            executed: [
+              { action: 'send_receipt', ref: 'DOC-7741', ok: true, summary: 'Receipt ready — https://nlt.example/r/DOC-7741', receiptUrl: 'https://nlt.example/r/DOC-7741', total: '1110' }
+            ]
+          });
+        }
+      },
+      {
+        n: 9, label: 'KB answer — Summit window (MER-POL-02)',
+        note: 'Knowledge card with source chips, tell line + copy, and Add to steps.',
+        run: function () {
+          push('merAskStr', {
+            askId: 'auto-1', title: 'Summit return window',
+            answer: 'Summit members get a 45-day return window on accessories (standard is 30). Maya’s ProDock purchase is 34 days old, so it qualifies for return or store credit under MER-POL-02 §3.1.',
+            tell: 'Actually, Maya — as a Summit member your accessory return window is 45 days, so we can absolutely take the ProDock back.',
+            sources: [{ id: 'MER-POL-02', title: 'Northlight Circle Loyalty' }],
+            escalate: false, escalateNote: ''
+          });
+        }
+      },
+      {
+        n: 10, label: 'Greet toast (merGreet)',
+        note: 'Dismissible suggested-greeting toast with copy. (Flow sends it pre-panel only.)',
+        run: function () {
+          push('merGreet', 'Thanks, Maya — so glad you reached us. I can see your details and everything you told our assistant, so no need to repeat a thing.');
+        }
+      },
+      {
+        n: 11, label: 'DOUBLE-ESCAPED full panel (proves jparse)',
+        note: 'Same panel, with the extra escape level observed live 2026-07-30. Must render identically.',
+        run: function () {
+          var s = JSON.stringify(FULL_PANEL);
+          var esc1 = s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');   // the flow’s merPanelEsc escaping
+          push('merStateStr', esc1);
+        }
+      },
+      {
+        n: 12, label: 'Rehydrate (re-push panel 3 unchanged)',
+        note: 'Must NOT flicker, duplicate, re-animate, or reset local state (heard/approved/added steps).',
+        run: function () { push('merStateStr', FULL_PANEL); }
+      }
+    ];
+
+    var btns = document.getElementById('btns');
+    SCENARIOS.forEach(function (sc) {
+      var b = document.createElement('button');
+      b.innerHTML = '<b>' + sc.n + '</b>' + sc.label;
+      b.addEventListener('click', sc.run);
+      btns.appendChild(b);
+      if (sc.note) {
+        var n = document.createElement('div');
+        n.className = 'note';
+        n.textContent = sc.note;
+        btns.appendChild(n);
+      }
+    });
+    log('Harness ready — SDK simulated, tile loaded. Run 1→12 for the full arc.');
   </script>
 </body>
 </html>
