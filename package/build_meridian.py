@@ -99,6 +99,8 @@ ROUTE_SW = NID('0176'); RT_SKIP = NID('0177'); RT_Q = NID('0178'); RT_DEF = NID(
 POL_SW = NID('0180'); PL_RUN = NID('0181'); PL_DEF = NID('0182')
 POLQ = NID('0183'); POL_KS = NID('0184'); POL_EXC = NID('0185'); POL_LLM = NID('0186'); POL_PARSE = NID('0187')
 STG1_S = NID('01b1'); STG2_P = NID('01b2'); STG2_S = NID('01b3'); STG3_S = NID('01b4')
+# tile slot self-heal (second-contact slot race): re-push the shell at END of early turns
+T2_SW = NID('01b5'); T2_GO = NID('01b6'); T2_DEF = NID('01b7'); TILE2 = NID('01b8')
 CMP_P = NID('0190'); CMP = NID('0191'); MERGE = NID('0192'); PUSH_SW = NID('0193')
 PS_PUSH = NID('0194'); PS_DEF = NID('0195'); PUSH = NID('0196')
 CMP2 = NID('0197'); MERGE2 = NID('0198'); PUSH_SW2 = NID('0199')
@@ -1012,6 +1014,19 @@ def build():
                                 'tiles': {TILE_ID: {'x': 1, 'y': 1, 'columns': 1, 'rows': 8}}},
           'backgroundSelector': 'default'})))
     N.append((TILE, node(TILE, 'setHTMLTile', 'Copilot Tile', {'tileId': TILE_ID, 'htmlContent': tile_html})))
+    # SLOT SELF-HEAL (live-diagnosed 2026-07-31): on the 2nd+ contact of a login session the
+    # workspace can lose the tile HTML while data frames keep arriving — the slot then renders
+    # "unknown type: sendTileData". A TRAILING shell re-push (after the turn's early sendDatas)
+    # reclaims the slot. Gated to pre-panel REAL turns only: boot turns are excluded (a remount
+    # triggers a boot ping — re-pushing on boot turns would loop), and once a composed panel
+    # exists we never remount again (remounts reset tile-local state).
+    N.append((T2_SW, node(T2_SW, 'switch', 'Tile slot heal needed?',
+        {'switch': {'type': 'cognigyScript',
+                    'operator': "((context.merPanelN||0)===0&&context.merBootTurn!==true)?'again':'skip'"},
+         'intentLevel': 'input.intent', 'useStrict': ''})))
+    N.append((T2_GO, node(T2_GO, 'case', 'again', {'case': {'value': 'again'}})))
+    N.append((T2_DEF, node(T2_DEF, 'default', 'skip', {})))
+    N.append((TILE2, node(TILE2, 'setHTMLTile', 'Copilot Tile (slot re-push)', {'tileId': TILE_ID, 'htmlContent': tile_html})))
     N.append((AFTERW, node(AFTERW, 'afterwards', 'Afterwards', {})))
     N.append((GREET_P, code_node(GREET_P, 'Greeting - instant ack', GREET_PREP)))
     N.append((GREET_S, node(GREET_S, 'sendData', 'Push greeting',
@@ -1147,7 +1162,9 @@ def build():
         rel(PROD_SW, None, children=[PROD_CSKIP, PROD_CDEF]),
         rel(PROD_CSKIP, PRE_P),
         rel(PROD_CDEF, PROD_H), rel(PROD_H, PROD_X), rel(PROD_X, PRE_P),
-        rel(PRE_P, PRE_S), rel(PRE_S, RECOMP_SW),
+        rel(PRE_P, PRE_S), rel(PRE_S, T2_SW),
+        rel(T2_SW, None, children=[T2_GO, T2_DEF]),
+        rel(T2_GO, TILE2), rel(TILE2, RECOMP_SW), rel(T2_DEF, RECOMP_SW),
         rel(RECOMP_SW, None, children=[RC_STOP, RC_DEF]),
         rel(RC_STOP, None),
         rel(RC_DEF, GATE), rel(GATE, GATE_PN), rel(GATE_PN, SENT_S), rel(SENT_S, STG1_S),
