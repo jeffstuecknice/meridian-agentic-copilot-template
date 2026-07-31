@@ -454,17 +454,17 @@ COMPOSER_PROMPT = (
     "   1. (talk) GREET — the live agent's opening message (the customer was talking to the automated assistant and is now connected; the specialist speaks FIRST). Warm, by name, 'I can see your details and your conversation with our assistant' so they know they never repeat themselves.\n"
     "   2. (talk) EMPATHIZE — acknowledge the SPECIFIC situation. If the customer has voiced a frustration (e.g. a denied return), name it specifically and recognize their loyalty (tier/years). This is the beat whose say line the agent relays to trigger the heard moment.\n"
     "   3. (talk) WALK THE COMPARISON — present the ranked recommendation conversationally: which option fits their stated needs and the one honest reason they might still pick the other. The say line must cite THEIR words, never read like a spec sheet.\n"
-    "   4. (action) MAKE IT RIGHT — when the POLICY FINDINGS show the customer's past sore point (a denied return/claim, a wrong charge, a missed appointment, a miscoded record) is actually eligible for an exception or adjustment, ONE beat that executes the fix: use process_return_exception for ANY reversal/resubmission/goodwill-case {orderRef,item,amount,clause,reason} and/or apply_credit {amount,unit,reason} as the findings dictate. Cite the clause in detail and policyQuote. Do NOT set offer — making it right needs no acceptance.\n"
+    "   4. (action) MAKE IT RIGHT — when the POLICY FINDINGS show the customer's past sore point (a denied return/claim, a wrong charge, a missed appointment, a miscoded record) is actually eligible for an exception or adjustment, ONE beat that executes the fix WITH AN EXPLICIT MACHINE PLAN, e.g.: exec:{actions:[{action:'process_return_exception',params:{orderRef,item,amount,clause,reason}},{action:'apply_credit',params:{amount,unit:'USD',reason}}]} — process_return_exception covers ANY reversal/resubmission/goodwill case; include apply_credit only when the findings put money back. Fill every param from the CUSTOMER RECORD and FINDINGS (order/bill/claim refs, amounts, the clause id). Cite the clause in detail and policyQuote. Do NOT set offer — making it right needs no acceptance.\n"
     "   5. (action) BOOK IT — once the customer has chosen (or accepted the recommendation), ONE beat for the main order/booking/enrollment/switch: exec:{actions:[{action:'place_order',params:{sku,creditApplied,shipMethod}}]} with offer:true (the customer's explicit yes authorizes it; state the price/terms AFTER any credit in the say line). If a make-right credit exists and the findings' credit-bundling clause allows it, apply it here (creditApplied) and say so, citing that clause.\n"
     "   6. (action) SEND THE CONFIRMATION — after the booking: exec:{actions:[{action:'send_receipt',params:{name,detail,total,orderRef}}]} where detail is 'title \\u2014 REF|title \\u2014 REF' rows of what was done. Its sayDone tells the agent the confirmation link is ready to paste into the chat.\n"
     "CUSTOMER REQUESTS — CRITICAL: whenever the CUSTOMER explicitly asks for something specific NOT already covered by a beat, ADD a dedicated (action) beat for THAT request at the END of the playbook, named after what they asked. Resolve it per the POLICY FINDINGS: allowed -> exec it; 'capped' -> do NOT auto-apply; OFFER the MAXIMUM policy permits (offer:true, say phrased as the offer, sayDone as the confirmation, exec at the cap). 'paid_addon' -> charge:true + chargeLabel + offer:true. 'escalate'/'not_covered'/no finding -> STILL add the beat with exec:{actions:[{action:'escalate_case',params:{summary,queue:'Care lead'}}]} and a say line that honestly says you're checking — never silently drop a request, never invent an outcome. Stable id derived from the request (e.g. 'req-price-match'). If a CURRENT PLAYBOOK list is provided, reuse those EXACT ids and labels for the same steps — never reword one into a near-duplicate.\n"
-    "Each beat = {id (stable slug), label (short imperative), kind ('talk'|'action'), status ('done'|'active'|'pending'), offer (optional boolean — true ONLY when the customer must ACCEPT before it executes), confirmGated (optional boolean — true for a beat that must WAIT for the customer's explicit yes/no), charge (optional boolean), chargeLabel (paid add-ons only), "
+    "Each beat = {id (stable slug), label (short imperative), kind ('talk'|'action' — kind:'action' REQUIRES a non-empty exec block; an action beat without exec is INVALID output: if you cannot fill the params from the record and findings, emit it as kind:'talk' instead), status ('done'|'active'|'pending'), offer (optional boolean — true ONLY when the customer must ACCEPT before it executes), confirmGated (optional boolean — true for a beat that must WAIT for the customer's explicit yes/no), charge (optional boolean), chargeLabel (paid add-ons only), "
     "say (ALWAYS populate — the EXACT customer-facing line the agent RELAYS for THIS beat, warm, 1-2 sentences, ready to paste. ACTION beats: the line said BEFORE doing it), "
     "sayDone (ACTION beats ONLY — the good-news line AFTER it succeeds, with the CONCRETE result: dollar amounts, the order total after credit, references; for send_receipt include that the link is ready to share), "
     "detail (one short internal why for the agent; cite the policy rule id on action beats), "
     "running (action beats: present-tense policy-checking title, e.g. 'Checking policy & processing\\u2026'), "
     "substeps (action beats: MAX 3 short steps that LEAD with the policy check — cite the policy rule id and what it permits, then the operational steps), "
-    "exec (action beats ONLY: {actions:[{action:'process_return_exception'|'apply_credit'|'place_order'|'send_receipt'|'escalate_case', params:{...}}]} — an ARRAY, one entry per system call, in order; param shapes: process_return_exception={orderRef,item,amount,clause,reason}; apply_credit={amount,unit,reason}; place_order={sku,creditApplied,shipMethod}; send_receipt={name,detail,total,orderRef}; escalate_case={summary,queue}; ALL param values are strings), "
+    "exec (REQUIRED on EVERY action beat, forbidden on talk beats: {actions:[{action:'process_return_exception'|'apply_credit'|'place_order'|'send_receipt'|'escalate_case', params:{...}}]} — an ARRAY, one entry per system call, in order; param shapes:process_return_exception={orderRef,item,amount,clause,reason}; apply_credit={amount,unit,reason}; place_order={sku,creditApplied,shipMethod}; send_receipt={name,detail,total,orderRef}; escalate_case={summary,queue}; ALL param values are strings), "
     "policyQuote (action beats that execute something ONLY — {ruleId, quote (the matching finding's quote VERBATIM — never reworded, never with changed numbers), source:'{{context.merBrand}} Policy Library \\u00b7 ' + the finding's source}. If the matching finding has no quote, omit policyQuote)}.\n"
     "COMPUTE STATUS BY READING THE TRANSCRIPT each turn: a TALK beat is 'done' if the AGENT's messages show they already expressed that beat's intent (match on meaning). A confirmGated beat is NEVER 'done' until the customer explicitly answered. ACTION beats are advanced by the tile — set status 'pending' unless the transcript clearly shows it handled. The FIRST not-done beat is 'active'; everything after is 'pending'. If the conversation just started, GREET is active.\n"
     "draftMessage: the single ready-to-send OUTBOUND message for AFTER the actions execute — warm, by preferred name, concrete results in one paragraph (what was returned, the credit, the order + total + ship date, the receipt link placeholder '<receipt link>').\n"
@@ -508,6 +508,18 @@ MERGE_CODE = (
     "    else{vok=vsay.length>0&&vblob.indexOf(vsay)>=0;}\n"
     "    if(!vok)vb.status='pending';\n"
     "  }\n"
+    # CONTRACT ENFORCEMENT: every action beat carries a runnable exec plan. First
+    # pass: a violation aborts the push so the composer retry gets a second shot.
+    # Retry pass: a still-missing exec downgrades the beat to talk (honest manual
+    # step) rather than rendering a dead Approve.
+    "  var noexec=[];\n"
+    "  for(var xj=0;xj<p.recommendations.length;xj++){var xb=p.recommendations[xj];\n"
+    "    if(xb&&xb.kind==='action'&&!(xb.exec&&xb.exec.actions&&xb.exec.actions.length))noexec.push(xb.id||('#'+xj));}\n"
+    "  var abortPush=false;\n"
+    "  if(noexec.length){\n"
+    "__ENFORCE__"
+    "  }\n"
+    "  if(!abortPush){\n"
     "  var slim=[];for(var i=0;i<p.recommendations.length;i++){var r=p.recommendations[i];if(r&&r.id&&r.label)slim.push({id:r.id,label:r.label});}\n"
     "  api.addToContext('merPanelSlim',slim,'simple');\n"
     "  api.addToContext('merPanelN',p.recommendations.length,'simple');\n"
@@ -515,7 +527,18 @@ MERGE_CODE = (
     "  api.addToContext('merPanelEsc',es,'simple');\n"
     + ("  api.log('[MER][PANEL] recs='+p.recommendations.length+' needs='+p.needs.length+' cmp='+(!!p.comparison),'info');\n"
        "  api.log('[MER][PANEL] '+JSON.stringify(p),'info');\n" if DEBUG else "")
-    + "}\n")
+    + "  }\n"
+    "}\n")
+
+MERGE_STRICT = MERGE_CODE.replace('__ENFORCE__',
+    "    api.log('[MER][MERGE] action beat(s) missing exec: '+noexec.join(',')+' \\u2014 retrying composer','error');\n"
+    "    api.addToContext('merPanelEsc','','simple');\n"
+    "    abortPush=true;\n")
+MERGE_LENIENT = MERGE_CODE.replace('__ENFORCE__',
+    "    api.log('[MER][MERGE] retry still missing exec on: '+noexec.join(',')+' \\u2014 downgrading to talk beats','error');\n"
+    "    for(var dj=0;dj<p.recommendations.length;dj++){var db=p.recommendations[dj];\n"
+    "      if(db&&db.kind==='action'&&!(db.exec&&db.exec.actions&&db.exec.actions.length)){\n"
+    "        db.kind='talk';delete db.running;delete db.substeps;delete db.sayDone;}}\n")
 
 PUSH_GUARD = "(context.merPanelEsc&&context.merPanelEsc.length)?'push':'skip'"
 
@@ -1043,7 +1066,7 @@ def build():
     N.append((CMP_P, code_node(CMP_P, 'Composer - prep', COMPOSER_PREP)))
     N.append((CMP, node(CMP, 'llmPromptV2', 'COMPOSER (mini)',
                         llm_cfg(MINI, COMPOSER_PROMPT, 'merPanelRaw', temp=0.3, max_tokens=4096, timeout=45000))))
-    N.append((MERGE, code_node(MERGE, 'Merge + escape panel', MERGE_CODE)))
+    N.append((MERGE, code_node(MERGE, 'Merge + escape panel', MERGE_STRICT)))
     N.append((PUSH_SW, node(PUSH_SW, 'switch', 'Panel usable?',
         {'switch': {'type': 'cognigyScript', 'operator': PUSH_GUARD},
          'intentLevel': 'input.intent', 'useStrict': ''})))
@@ -1053,7 +1076,7 @@ def build():
                          {'tileId': TILE_ID, 'json': '{"merStateStr":"{{context.merPanelEsc}}"}'})))
     N.append((CMP2, node(CMP2, 'llmPromptV2', 'COMPOSER retry (mini)',
                          llm_cfg(MINI, COMPOSER_PROMPT, 'merPanelRaw', temp=0.2, max_tokens=4096, timeout=45000))))
-    N.append((MERGE2, code_node(MERGE2, 'Merge + escape panel (retry)', MERGE_CODE)))
+    N.append((MERGE2, code_node(MERGE2, 'Merge + escape panel (retry)', MERGE_LENIENT)))
     N.append((PUSH_SW2, node(PUSH_SW2, 'switch', 'Panel usable? (retry)',
         {'switch': {'type': 'cognigyScript', 'operator': PUSH_GUARD},
          'intentLevel': 'input.intent', 'useStrict': ''})))
