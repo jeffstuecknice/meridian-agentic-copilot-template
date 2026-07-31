@@ -21,10 +21,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 require_once __DIR__ . '/meridian_customers.php';
 
-/* ---- merge GET + JSON body into one params array ---- */
+/* ---- merge GET + JSON body into one params array ----
+   json_decode rejects invalid UTF-8 outright (a Latin-1 byte from a Windows curl
+   console would silently drop the whole body) — salvage once before giving up. */
 $body = [];
 $raw = file_get_contents('php://input');
-if ($raw) { $j = json_decode($raw, true); if (is_array($j)) $body = $j; }
+if ($raw) {
+  $j = json_decode($raw, true);
+  if (!is_array($j)) $j = json_decode(mb_convert_encoding($raw, 'UTF-8', 'UTF-8, ISO-8859-1'), true);
+  if (is_array($j)) $body = $j;
+}
 $P = array_merge($_GET, $_POST, $body);
 $action = isset($P['action']) ? strtolower(trim($P['action'])) : '';
 

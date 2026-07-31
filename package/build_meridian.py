@@ -456,7 +456,7 @@ COMPOSER_PROMPT = (
     "   3. (talk) WALK THE COMPARISON — present the ranked recommendation conversationally: which option fits their stated needs and the one honest reason they might still pick the other. The say line must cite THEIR words, never read like a spec sheet.\n"
     "   4. (action) MAKE IT RIGHT — when the POLICY FINDINGS show the customer's past sore point (a denied return/claim, a wrong charge, a missed appointment, a miscoded record) is actually eligible for an exception or adjustment, ONE beat that executes the fix WITH AN EXPLICIT MACHINE PLAN, e.g.: exec:{actions:[{action:'process_return_exception',params:{orderRef,item,amount,clause,reason}},{action:'apply_credit',params:{amount,unit:'USD',reason}}]} — process_return_exception covers ANY reversal/resubmission/goodwill case; include apply_credit only when the findings put money back. Fill every param from the CUSTOMER RECORD and FINDINGS (order/bill/claim refs, amounts, the clause id). Cite the clause in detail and policyQuote. Do NOT set offer — making it right needs no acceptance.\n"
     "   5. (action) BOOK IT — once the customer has chosen (or accepted the recommendation), ONE beat for the main order/booking/enrollment/switch: exec:{actions:[{action:'place_order',params:{sku,creditApplied,shipMethod}}]} with offer:true (the customer's explicit yes authorizes it; state the price/terms AFTER any credit in the say line). If a make-right credit exists and the findings' credit-bundling clause allows it, apply it here (creditApplied) and say so, citing that clause.\n"
-    "   6. (action) SEND THE CONFIRMATION — after the booking: exec:{actions:[{action:'send_receipt',params:{name,detail,total,orderRef}}]} where detail is 'title \\u2014 REF|title \\u2014 REF' rows of what was done. Its sayDone tells the agent the confirmation link is ready to paste into the chat.\n"
+    "   6. (action) SEND THE CONFIRMATION — after the booking: exec:{actions:[{action:'send_receipt',params:{name,detail,total,orderRef}}]} where detail is 'title \\u2014 REF|title \\u2014 REF' rows of what was done. Its sayDone tells the agent the confirmation link is ready to paste into the chat. send_receipt is a SYSTEM capability, not a policy question — it never requires a policy finding and is NEVER escalated.\n"
     "CUSTOMER REQUESTS — CRITICAL: whenever the CUSTOMER explicitly asks for something specific NOT already covered by a beat, ADD a dedicated (action) beat for THAT request at the END of the playbook, named after what they asked. Resolve it per the POLICY FINDINGS: allowed -> exec it; 'capped' -> do NOT auto-apply; OFFER the MAXIMUM policy permits (offer:true, say phrased as the offer, sayDone as the confirmation, exec at the cap). 'paid_addon' -> charge:true + chargeLabel + offer:true. 'escalate'/'not_covered'/no finding -> STILL add the beat with exec:{actions:[{action:'escalate_case',params:{summary,queue:'Care lead'}}]} and a say line that honestly says you're checking — never silently drop a request, never invent an outcome. Stable id derived from the request (e.g. 'req-price-match'). If a CURRENT PLAYBOOK list is provided, reuse those EXACT ids and labels for the same steps — never reword one into a near-duplicate.\n"
     "Each beat = {id (stable slug), label (short imperative), kind ('talk'|'action' — kind:'action' REQUIRES a non-empty exec block; an action beat without exec is INVALID output: if you cannot fill the params from the record and findings, emit it as kind:'talk' instead), status ('done'|'active'|'pending'), offer (optional boolean — true ONLY when the customer must ACCEPT before it executes), confirmGated (optional boolean — true for a beat that must WAIT for the customer's explicit yes/no), charge (optional boolean), chargeLabel (paid add-ons only), "
     "say (ALWAYS populate — the EXACT customer-facing line the agent RELAYS for THIS beat, warm, 1-2 sentences, ready to paste. ACTION beats: the line said BEFORE doing it), "
@@ -464,7 +464,7 @@ COMPOSER_PROMPT = (
     "detail (one short internal why for the agent; cite the policy rule id on action beats), "
     "running (action beats: present-tense policy-checking title, e.g. 'Checking policy & processing\\u2026'), "
     "substeps (action beats: MAX 3 short steps that LEAD with the policy check — cite the policy rule id and what it permits, then the operational steps), "
-    "exec (REQUIRED on EVERY action beat, forbidden on talk beats: {actions:[{action:'process_return_exception'|'apply_credit'|'place_order'|'send_receipt'|'escalate_case', params:{...}}]} — an ARRAY, one entry per system call, in order; param shapes:process_return_exception={orderRef,item,amount,clause,reason}; apply_credit={amount,unit,reason}; place_order={sku,creditApplied,shipMethod}; send_receipt={name,detail,total,orderRef}; escalate_case={summary,queue}; ALL param values are strings), "
+    "exec (REQUIRED on EVERY action beat, forbidden on talk beats: {actions:[{action:'process_return_exception'|'apply_credit'|'place_order'|'send_receipt'|'escalate_case', params:{...}}]} — an ARRAY, one entry per system call, in order; param shapes:process_return_exception={orderRef,item,amount,clause,reason}; apply_credit={amount,unit,reason}; place_order={sku,creditApplied,shipMethod}; send_receipt={name,detail,total,orderRef}; escalate_case={summary,queue}; ALL param values are strings. Use EXACTLY these param names and no others — never invent params (no sku/item variations, no customer_id, no override flags; the system injects the customer id itself). ONE action entry per system call — never duplicate the same action to express an override; amount = the real dollar figure from the record), "
     "policyQuote (action beats that execute something ONLY — {ruleId, quote (the matching finding's quote VERBATIM — never reworded, never with changed numbers), source:'{{context.merBrand}} Policy Library \\u00b7 ' + the finding's source}. If the matching finding has no quote, omit policyQuote)}.\n"
     "COMPUTE STATUS BY READING THE TRANSCRIPT each turn: a TALK beat is 'done' if the AGENT's messages show they already expressed that beat's intent (match on meaning). A confirmGated beat is NEVER 'done' until the customer explicitly answered. ACTION beats are advanced by the tile — set status 'pending' unless the transcript clearly shows it handled. The FIRST not-done beat is 'active'; everything after is 'pending'. If the conversation just started, GREET is active.\n"
     "draftMessage: the single ready-to-send OUTBOUND message for AFTER the actions execute — warm, by preferred name, concrete results in one paragraph (what was returned, the credit, the order + total + ship date, the receipt link placeholder '<receipt link>').\n"
@@ -557,13 +557,16 @@ X_MAP_CODE = (
     "  if(['process_return_exception','apply_credit','place_order','send_receipt','escalate_case'].indexOf(nm)<0)continue;\n"
     "  clean.push({action:nm,params:(a.params&&typeof a.params==='object')?a.params:{}});\n"
     "}\n"
-    "function q(v){return encodeURIComponent(v==null?'':String(v));}\n"
-    "var url='';\n"
-    "if(clean.length){url='" + MOCK_API + "?action=execute_batch&customerId='+q(cid)+'&actions='+q(JSON.stringify(clean));}\n"
+    # POST body, never a JSON-in-querystring GET: the long encoded GET returned empty
+    # through the live httpRequest node while byte-identical curls got HTTP 200 + refs.
+    "var url='';var body='';\n"
+    "if(clean.length){url='" + MOCK_API + "?action=execute_batch';\n"
+    "  body=JSON.stringify({customerId:cid,actions:clean});}\n"
     "api.addToContext('merExecRaw',null,'simple');\n"
     "api.addToContext('merExecUrl',url,'simple');\n"
+    "api.addToContext('merExecBody',body,'simple');\n"
     "api.addToContext('merExecRecId',String(p.recId||''),'simple');\n"
-    + ("api.log('[MER][EXEC>] recId='+String(p.recId||'')+' actions='+clean.length+(url?'':' (INVALID \\u2014 no runnable actions)'),'info');\n" if DEBUG else ""))
+    + ("api.log('[MER][EXEC>] recId='+String(p.recId||'')+' actions='+clean.length+' bodyLen='+body.length+(url?' (POST)':' (INVALID \\u2014 no runnable actions)'),'info');\n" if DEBUG else ""))
 
 X_RES_CODE = (
     "var recId=context.merExecRecId||'';\n"
@@ -576,7 +579,10 @@ X_RES_CODE = (
     "  var r=(raw&&typeof raw.result==='object'&&raw.result)?raw.result:((raw&&typeof raw.body==='object'&&raw.body)?raw.body:raw);\n"
     "  if(typeof r==='string'){try{r=JSON.parse(r);}catch(e){}}\n"
     "  var exd=(r&&r.executed)||[];\n"
-    "  if(!exd.length){out.narration='ERROR: the '+(context.merBrand||'Northlight')+' systems returned no execution result.';api.log('[MER][EXEC<] empty result','error');}\n"
+    "  if(!exd.length){\n"
+    "    var rawSnip='';try{rawSnip=String(JSON.stringify(raw)||'').slice(0,220);}catch(e){rawSnip='(unserializable)';}\n"
+    "    out.narration='ERROR: the '+(context.merBrand||'Northlight')+' systems returned no execution result. :: raw='+rawSnip;\n"
+    "    api.log('[MER][EXEC<] empty result :: raw='+rawSnip,'error');}\n"
     "  else{\n"
     "    out.ok=(r.ok===true);\n"
     "    for(var i=0;i<exd.length;i++){var e1=exd[i]||{};var d=e1.detail||{};var sum='';\n"
@@ -745,6 +751,16 @@ CM_FIN_CODE = (
 
 
 # ═════════════════════════ config factories ═════════════════════════
+
+def http_post_cfg(url_tpl, body_tpl, context_key):
+    """POST with a CognigyScript-substituted text body (Content-Type json). The exec
+    batch MUST go as a body: the long JSON-in-querystring GET returned empty through
+    the live httpRequest node while identical curls succeeded (live-diagnosed 2026-07-31)."""
+    cfg = http_cfg(url_tpl, context_key)
+    cfg.update({'type': 'POST', 'payloadType': 'text', 'payloadText': body_tpl,
+                'headers': '{"Content-Type":"application/json"}'})
+    return cfg
+
 
 def http_cfg(url_tpl, context_key):
     return {'type': 'GET', 'url': url_tpl, 'headers': '{}', 'payloadType': 'none', 'payloadText': '',
@@ -947,8 +963,8 @@ def build():
          'intentLevel': 'input.intent', 'useStrict': ''})))
     N.append((X_GO, node(X_GO, 'case', 'go', {'case': {'value': 'go'}})))
     N.append((X_BAD, node(X_BAD, 'default', 'invalid plan', {})))
-    N.append((X_HTTP, node(X_HTTP, 'httpRequest', 'Execute - Northlight systems (batch)',
-                           http_cfg('{{context.merExecUrl}}', 'merExecRaw'))))
+    N.append((X_HTTP, node(X_HTTP, 'httpRequest', 'Execute - brand systems (batch POST)',
+                           http_post_cfg('{{context.merExecUrl}}', '{{context.merExecBody}}', 'merExecRaw'))))
     N.append((X_RES, code_node(X_RES, 'Execute - collect refs', X_RES_CODE)))
     N.append((X_SEND, node(X_SEND, 'sendData', 'Push exec result to tile',
                            {'tileId': TILE_ID, 'json': '{"merExecStr":"{{context.merExecEsc}}"}'})))
