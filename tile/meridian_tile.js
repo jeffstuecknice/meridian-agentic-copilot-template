@@ -163,8 +163,22 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
 .honest-in{border-top:1px dashed var(--bd);padding-top:8px}
 .honest .hl{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--warn)}
 .honest .ht{font-size:10.5px;font-style:italic;color:var(--ink-2);line-height:1.45;margin-top:3px}
-.prod-img{margin:0 0 8px;border-radius:8px;overflow:hidden;background:var(--page)}
-.prod-img img{display:block;width:100%;height:84px;object-fit:cover}
+.prod-img{margin:0 0 8px;border-radius:8px;overflow:hidden;background:var(--page);
+  aspect-ratio:16/10;max-height:190px}
+.prod-img img{display:block;width:100%;height:100%;object-fit:cover;cursor:zoom-in}
+
+/* ---------- image lightbox (click any product/hero image) ---------- */
+.mer-lightbox{position:fixed;inset:0;z-index:9999;background:rgba(10,14,25,.85);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:18px;cursor:zoom-out;animation:mer-lb-in .16s ease}
+@keyframes mer-lb-in{from{opacity:0}to{opacity:1}}
+.mer-lightbox img{max-width:96%;max-height:80%;object-fit:contain;border-radius:10px;
+  background:#fff;box-shadow:0 18px 60px rgba(0,0,0,.5)}
+.mer-lightbox .lb-cap{color:#E7ECF5;font-size:12px;line-height:1.5;margin-top:10px;
+  text-align:center;max-width:92%}
+.mer-lightbox .lb-x{position:absolute;top:10px;right:14px;width:30px;height:30px;
+  border:none;border-radius:50%;background:rgba(255,255,255,.16);color:#fff;
+  font-size:15px;line-height:1;cursor:pointer}
 .prod.prov{border-style:dashed}
 .prod.prov .prod-tag{background:var(--ai-bg);color:var(--ai-deep)}
 
@@ -189,8 +203,9 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   background-size:200% 100%;animation:mer-shim 1.5s linear infinite}
 .hero-shimmer svg{width:13px;height:13px;flex:0 0 13px}
 @keyframes mer-shim{to{background-position:-200% 0}}
-.hero-imgwrap{max-height:200px;overflow:hidden;background:var(--ai-bg)}
-.hero-img{display:block;width:100%;object-fit:cover;opacity:0;transform:scale(1.02);
+.hero-imgwrap{aspect-ratio:21/9;max-height:250px;overflow:hidden;background:var(--ai-bg)}
+.hero-img{display:block;width:100%;height:100%;object-fit:cover;object-position:center 42%;
+  cursor:zoom-in;opacity:0;transform:scale(1.02);
   transition:opacity .9s ease,transform 1.4s ease}
 .hero-img.in{opacity:1;transform:none}
 .hero-cap{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 11px;
@@ -756,7 +771,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       h += '<div class="prod' + (lead ? ' lead' : '') + (isProv ? ' prov' : '') + '">' +
         '<div class="prod-tag">' + esc(pr.tag || (isProv ? 'On the table' : (lead ? 'Best fit for you' : 'The alternative'))) + '</div>' +
         '<div class="prod-bd">' +
-        (imgSrc ? '<div class="prod-img"><img alt="' + esc(pr.name) + '" data-imgfall src="' + esc(imgSrc) + '"></div>' : '') +
+        (imgSrc ? '<div class="prod-img"><img alt="' + esc(pr.name) + '" data-imgfall data-zoom data-cap="' +
+          esc(pr.name + ' — ' + fmt$(pr.price)) + '" src="' + esc(imgSrc) + '"></div>' : '') +
         '<div class="prod-nm"><span class="n">' + esc(pr.name) + '</span><span class="p">' + fmt$(pr.price) + '</span></div>' +
         (has(pr.headline) ? '<div class="prod-hl">' + esc(pr.headline) + '</div>' : '');
       if (pr.fit && pr.fit.length) {
@@ -791,7 +807,9 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       h += '<div class="hero-shimmer">' + IC_SPARK +
         '<span>AI Agent is sketching how the ' + esc(name) + ' fits ' + firstNameLabel() + '’s day…</span></div>';
     } else if (HERO.state === 'ok') {
-      h += '<div class="hero-imgwrap"><img class="hero-img" alt="AI-generated visualization" src="' + esc(HERO.url) + '"></div>' +
+      h += '<div class="hero-imgwrap"><img class="hero-img" alt="AI-generated visualization" data-zoom data-cap="' +
+        esc('AI-generated visualization — drawn from what ' + firstNameLabel() + ' told us') +
+        '" src="' + esc(HERO.url) + '"></div>' +
         '<div class="hero-cap"><span class="hc-l">' + IC_SPARK +
         '<span>AI-generated visualization — drawn from what ' + firstNameLabel() + ' told us</span></span>' +
         '<button type="button" class="hero-why" data-act="hero-prompt">' +
@@ -1133,6 +1151,28 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     tendGreet();
   }
 
+  /* Lightbox — full-size view of any panel image; click anywhere or Esc closes.
+     Lives outside the scroll area so renders never tear it down mid-view. */
+  var _lb = null;
+  function closeLightbox() {
+    if (!_lb) return;
+    document.removeEventListener('keydown', _lbKey, true);
+    _lb.remove(); _lb = null;
+  }
+  function _lbKey(e) { if (e.key === 'Escape') { e.stopPropagation(); closeLightbox(); } }
+  function openLightbox(src, cap) {
+    if (!src || !/^https:\/\//.test(src)) return;
+    closeLightbox();
+    _lb = document.createElement('div');
+    _lb.className = 'mer-lightbox';
+    _lb.innerHTML = '<button type="button" class="lb-x" aria-label="Close">✕</button>' +
+      '<img alt="' + esc(cap) + '" src="' + esc(src) + '">' +
+      (has(cap) ? '<div class="lb-cap">' + esc(cap) + '</div>' : '');
+    _lb.addEventListener('click', closeLightbox);   // anywhere closes (zoom-out affordance)
+    document.addEventListener('keydown', _lbKey, true);
+    document.body.appendChild(_lb);
+  }
+
   /* Image listeners re-attach after every rebuild (no inline handlers in the
      sandbox): missing static shots hide their strip; the hero fades in on load
      and a dead generated URL surfaces as a visible error. */
@@ -1164,6 +1204,9 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
      no inline onclick anywhere, per the tile sandbox rules)
      ====================================================================== */
   app.addEventListener('click', function (e) {
+    /* any image marked data-zoom opens full-size in the lightbox */
+    var z = e.target && e.target.closest ? e.target.closest('img[data-zoom]') : null;
+    if (z) { openLightbox(z.getAttribute('src'), z.getAttribute('data-cap') || z.getAttribute('alt') || ''); return; }
     var t = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
     if (!t) return;
     var act = t.getAttribute('data-act');
