@@ -103,6 +103,8 @@ STG1_S = NID('01b1'); STG2_P = NID('01b2'); STG2_S = NID('01b3'); STG3_S = NID('
 T2_SW = NID('01b5'); T2_GO = NID('01b6'); T2_DEF = NID('01b7'); TILE2 = NID('01b8')
 # instant profile push — fires BEFORE the catalog fetch so the customer card is first on screen
 PRE0_P = NID('01b9'); PRE0_S = NID('01ba')
+# exec-result redelivery — the workspace can drop a data frame; the tile dedupes by signature
+X_RH = NID('01bb')
 CMP_P = NID('0190'); CMP = NID('0191'); MERGE = NID('0192'); PUSH_SW = NID('0193')
 PS_PUSH = NID('0194'); PS_DEF = NID('0195'); PUSH = NID('0196')
 CMP2 = NID('0197'); MERGE2 = NID('0198'); PUSH_SW2 = NID('0199')
@@ -1052,6 +1054,12 @@ def build():
                             {'tileId': TILE_ID, 'json': '{"merConvoStr":"{{context.merConvoEsc}}"}'})))
     N.append((REHYD, node(REHYD, 'sendData', 'Rehydrate panel (cached)',
                           {'tileId': TILE_ID, 'json': '{"merStateStr":"{{context.merPanelEsc}}"}'})))
+    # exec-result REDELIVERY: the workspace occasionally drops a data frame (live-observed:
+    # Cognigy logged "sent successfully" while the tile's watchdog fired). Re-pushing the last
+    # exec result every turn costs nothing — the tile's exec handling is signature-guarded —
+    # and heals a lost frame the moment the conversation moves.
+    N.append((X_RH, node(X_RH, 'sendData', 'Redeliver last exec result',
+                         {'tileId': TILE_ID, 'json': '{"merExecStr":"{{context.merExecEsc}}"}'})))
     N.append((CRM_P, code_node(CRM_P, 'CRM - prep lookup', CRM_PREP)))
     N.append((CRM_SW, node(CRM_SW, 'switch', 'CRM cached?',
         {'switch': {'type': 'cognigyScript', 'operator': "context.merCrmSkip||'go'"},
@@ -1172,7 +1180,7 @@ def build():
         # default message turn (once/grid/tile now mounts on the main chain, before the router)
         rel(DEF_R, GREET_P),
         rel(GREET_P, GREET_S), rel(GREET_S, CONVO_B),
-        rel(CONVO_B, CONVO_S), rel(CONVO_S, REHYD), rel(REHYD, CRM_P),
+        rel(CONVO_B, CONVO_S), rel(CONVO_S, REHYD), rel(REHYD, X_RH), rel(X_RH, CRM_P),
         rel(CRM_P, CRM_SW),
         rel(CRM_SW, None, children=[CRM_CSKIP, CRM_CDEF]),
         rel(CRM_CSKIP, PRE0_P),
