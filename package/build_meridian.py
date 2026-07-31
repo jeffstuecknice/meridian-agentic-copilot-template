@@ -1084,7 +1084,12 @@ def build():
                           {'tileId': TILE_ID, 'json': '{"merStateStr":"{{context.merPreEsc}}"}'})))
     N.append((RECOMP_SW, node(RECOMP_SW, 'switch', 'Recompute this turn?',
         {'switch': {'type': 'cognigyScript',
-                    'operator': "(!context.merCrm)?'stop':(((context.merLastPart==='Agent'||context.merDupTurn===true||context.merBootTurn===true)&&(context.merPanelN||0)>0)?'stop':'go')"},
+                    # A turn with NO customer message stops BEFORE the gate LLM — except the tile's
+                    # boot turn, which is where the briefing composes (the boot turn paints the cached
+                    # pre-panel first, so the brain runs BEHIND the cards, not in front of them).
+                    # Without this, the Begin-Conversation turn ran the full 12-15s brain on an empty
+                    # conversation and the boot ping (the profile paint) queued behind it.
+                    'operator': "(!context.merCrm)?'stop':((context.merGateMsg==='(no customer message yet)'&&context.merBootTurn!==true)?'stop':(((context.merLastPart==='Agent'||context.merDupTurn===true||context.merBootTurn===true)&&(context.merPanelN||0)>0)?'stop':'go'))"},
          'intentLevel': 'input.intent', 'useStrict': ''})))
     N.append((RC_STOP, node(RC_STOP, 'case', 'stop', {'case': {'value': 'stop'}})))
     N.append((RC_DEF, node(RC_DEF, 'default', 'go', {})))
