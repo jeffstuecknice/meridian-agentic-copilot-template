@@ -203,10 +203,18 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   background-size:200% 100%;animation:mer-shim 1.5s linear infinite}
 .hero-shimmer svg{width:13px;height:13px;flex:0 0 13px}
 @keyframes mer-shim{to{background-position:-200% 0}}
-.hero-imgwrap{aspect-ratio:21/9;max-height:250px;overflow:hidden;background:var(--ai-bg)}
-.hero-img{display:block;width:100%;height:100%;object-fit:cover;object-position:center 42%;
-  cursor:zoom-in;opacity:0;transform:scale(1.02);
-  transition:opacity .9s ease,transform 1.4s ease}
+.hero-imgwrap{aspect-ratio:16/9;overflow:hidden;background:var(--ai-bg)}
+.hero-img{display:block;width:100%;height:100%;object-fit:cover;cursor:zoom-in;
+  opacity:0;transform:scale(1.02);transition:opacity .9s ease,transform 1.4s ease}
+.hero-rev{display:flex;gap:6px;padding:0 10px 10px}
+.hero-rev input{flex:1;min-width:0;border:1px solid var(--ai-bd);border-radius:8px;
+  padding:6px 9px;font-size:11px;font-family:inherit;background:#fff;color:var(--ink)}
+.hero-rev input:focus{outline:none;border-color:var(--ai)}
+.hero-rev input::placeholder{color:var(--ink-3)}
+.hero-redraw{border:none;border-radius:8px;background:var(--ai);color:#fff;font-size:11px;
+  font-weight:700;padding:6px 12px;cursor:pointer;white-space:nowrap}
+.hero-orig{border:1px solid var(--ai-bd);border-radius:8px;background:#fff;color:var(--ai-deep);
+  font-size:11px;padding:6px 10px;cursor:pointer;white-space:nowrap}
 .hero-img.in{opacity:1;transform:none}
 .hero-cap{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 11px;
   font-size:10.5px;color:var(--ai-deep)}
@@ -552,17 +560,36 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   function skuImg(sku) {
     return SKU_IMG[String(sku == null ? '' : sku).toUpperCase().replace(/[^A-Z0-9]/g, '')] || '';
   }
-  var HERO = { sig: '', state: '', url: '', err: '', showPrompt: false };
+  var HERO = { sig: '', base: '', revs: [], state: '', url: '', err: '', showPrompt: false };
+  var HERO_ASPECT = '16:9';   // generated natively at the container's ratio — always fills, zero crop
 
   function heroPrompt() {
     var c = S.panel && S.panel.comparison;
     return (c && typeof c.heroPrompt === 'string' && c.heroPrompt.trim()) ? c.heroPrompt.trim() : '';
   }
+  /* effective brief = the composer's base + the agent's cumulative scene changes */
+  function heroEff() {
+    var b = heroPrompt(); if (!b) return '';
+    return HERO.revs.length
+      ? b + ' SCENE CHANGES — apply ALL of these and keep everything else about the scene identical: ' + HERO.revs.join('; ') + '.'
+      : b;
+  }
   function tendHero() {
-    var p = heroPrompt();
-    if (!p || p === HERO.sig) return;
-    HERO.sig = p; HERO.state = 'gen'; HERO.url = ''; HERO.err = ''; HERO.showPrompt = false;
-    startHero(p);
+    var b = heroPrompt();
+    if (!b) return;
+    if (b !== HERO.base) { HERO.base = b; HERO.revs = []; }   // a new composer brief resets agent edits
+    var eff = heroEff();
+    if (eff === HERO.sig) return;
+    HERO.sig = eff; HERO.state = 'gen'; HERO.url = ''; HERO.err = ''; HERO.showPrompt = false;
+    startHero(eff);
+  }
+  function heroRedraw() {
+    var el = document.getElementById('mer-hero-rev');
+    var v = el ? String(el.value || '').trim() : '';
+    if (!v) return;
+    if (el) el.value = '';
+    HERO.revs.push(v.slice(0, 140));
+    tendHero();
   }
   function startHero(mine) {
     var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
@@ -571,7 +598,7 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     fetch(GEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: mine }),
+      body: JSON.stringify({ prompt: mine, aspect: HERO_ASPECT }),
       signal: ctl ? ctl.signal : undefined
     }).then(function (r) { return r.json(); }).then(function (j) {
       if (HERO.sig !== mine) return;                       // superseded by a newer prompt
@@ -805,7 +832,9 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     var h = '<div class="hero">';
     if (HERO.state === 'gen') {
       h += '<div class="hero-shimmer">' + IC_SPARK +
-        '<span>AI Agent is sketching how the ' + esc(name) + ' fits ' + firstNameLabel() + '’s day…</span></div>';
+        '<span>' + (HERO.revs.length
+          ? 'AI Agent is redrawing the scene — ' + esc(HERO.revs[HERO.revs.length - 1]) + '…'
+          : 'AI Agent is sketching how the ' + esc(name) + ' fits ' + firstNameLabel() + '’s day…') + '</span></div>';
     } else if (HERO.state === 'ok') {
       h += '<div class="hero-imgwrap"><img class="hero-img" alt="AI-generated visualization" data-zoom data-cap="' +
         esc('AI-generated visualization — drawn from what ' + firstNameLabel() + ' told us') +
@@ -814,7 +843,13 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
         '<span>AI-generated visualization — drawn from what ' + firstNameLabel() + ' told us</span></span>' +
         '<button type="button" class="hero-why" data-act="hero-prompt">' +
         (HERO.showPrompt ? 'Hide the brief' : 'What the AI asked for') + '</button></div>' +
-        (HERO.showPrompt ? '<div class="hero-brief">“' + esc(heroPrompt()) + '”</div>' : '');
+        (HERO.showPrompt ? '<div class="hero-brief">“' + esc(heroEff()) + '”</div>' : '') +
+        /* the live agent can art-direct the scene — each request regenerates via the same pipeline */
+        '<div class="hero-rev"><input id="mer-hero-rev" type="text" maxlength="140" ' +
+        'placeholder="Change the scene — e.g. swap the coffee for a large beer">' +
+        '<button type="button" class="hero-redraw" data-act="hero-redraw">Redraw</button>' +
+        (HERO.revs.length ? '<button type="button" class="hero-orig" data-act="hero-orig">Original</button>' : '') +
+        '</div>';
     } else {
       h += '<div class="hero-err"><div class="he-t">⚠ IMAGE GENERATION FAILED</div>' +
         '<div class="he-d">' + esc(HERO.err) + '</div>' +
@@ -1118,7 +1153,7 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       S.cmds.map(function (c) { return [c.id, c.status]; }),
       S.added.map(function (b) { return b.id; }),
       OV,
-      [HERO.sig, HERO.state, HERO.url, HERO.err, HERO.showPrompt],
+      [HERO.sig, HERO.state, HERO.url, HERO.err, HERO.showPrompt, HERO.revs.length],
       S.stages
     ]);
   }
@@ -1143,8 +1178,14 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       h += htmlAsks();
     }
     var keep = scroll.scrollTop;
+    /* the hero-redraw input must survive rebuilds mid-typing */
+    var revEl = document.getElementById('mer-hero-rev');
+    var revVal = revEl ? revEl.value : '', revFocus = revEl && document.activeElement === revEl;
     scroll.innerHTML = h;
     scroll.scrollTop = keep;
+    revEl = document.getElementById('mer-hero-rev');
+    if (revEl && revVal) revEl.value = revVal;
+    if (revEl && revFocus) revEl.focus();
     wireImgs();
     animateSentIn();
     tendThinkTimer();
@@ -1203,6 +1244,9 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
      §10 INTERACTIONS — one delegated click handler (survives every rebuild;
      no inline onclick anywhere, per the tile sandbox rules)
      ====================================================================== */
+  app.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target && e.target.id === 'mer-hero-rev') { e.preventDefault(); heroRedraw(); }
+  });
   app.addEventListener('click', function (e) {
     /* any image marked data-zoom opens full-size in the lightbox */
     var z = e.target && e.target.closest ? e.target.closest('img[data-zoom]') : null;
@@ -1231,6 +1275,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     if (act === 'confirm-no') { confirmBeat(id, false); return; }
     if (act === 'hero-prompt') { HERO.showPrompt = !HERO.showPrompt; render(); return; }
     if (act === 'hero-retry') { HERO.sig = ''; tendHero(); return; }
+    if (act === 'hero-redraw') { heroRedraw(); return; }
+    if (act === 'hero-orig') { HERO.revs = []; tendHero(); return; }
     if (act === 'ask-send') { submitInput('ask'); return; }
     if (act === 'cmd-send') { submitInput('command'); return; }
     if (act === 'ask-add') { addAskAsStep(id); return; }

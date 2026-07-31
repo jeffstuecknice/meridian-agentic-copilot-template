@@ -47,13 +47,20 @@ $P = array_merge($_GET, $_POST, $body);
 $prompt = isset($P['prompt']) ? trim((string)$P['prompt']) : '';
 
 if ($prompt === '') out(['ok' => false, 'error' => 'missing prompt'], 400);
-if (strlen($prompt) > 900) out(['ok' => false, 'error' => 'prompt too long (' . strlen($prompt) . ' chars, max 900)'], 400);
+if (strlen($prompt) > 1400) out(['ok' => false, 'error' => 'prompt too long (' . strlen($prompt) . ' chars, max 1400)'], 400);
+
+/* optional native aspect ratio (the tile asks for 16:9 heroes so the image always
+   fills its container with zero cropping) */
+$aspect = isset($P['aspect']) ? trim((string)$P['aspect']) : '';
+if ($aspect !== '' && !in_array($aspect, ['1:1', '3:4', '4:3', '9:16', '16:9', '21:9'], true)) {
+  out(['ok' => false, 'error' => 'unsupported aspect ratio: ' . $aspect], 400);
+}
 
 $genDir = __DIR__ . '/gen';
 if (!is_dir($genDir) && !@mkdir($genDir, 0755, true)) out(['ok' => false, 'error' => 'cannot create gen/ directory on server'], 500);
 
-/* cache key = model + prompt, so a model upgrade regenerates cleanly */
-$hash = md5($MODEL . '|' . $prompt);
+/* cache key = model + aspect + prompt, so a model upgrade or ratio change regenerates cleanly */
+$hash = md5($MODEL . '|' . $aspect . '|' . $prompt);
 $file = $genDir . '/' . $hash . '.png';
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $url = $scheme . '://' . $_SERVER['HTTP_HOST'] . rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/gen/' . $hash . '.png';
@@ -69,9 +76,11 @@ if (!is_file($keyFile)) {
 $key = trim(file_get_contents($keyFile));
 if ($key === '') out(['ok' => false, 'error' => 'gen_key.txt is empty on server'], 500);
 
+$genCfg = ['responseModalities' => ['IMAGE']];
+if ($aspect !== '') $genCfg['imageConfig'] = ['aspectRatio' => $aspect];
 $req = json_encode([
   'contents' => [['parts' => [['text' => $prompt]]]],
-  'generationConfig' => ['responseModalities' => ['IMAGE']],
+  'generationConfig' => $genCfg,
 ]);
 
 $t0 = microtime(true);
