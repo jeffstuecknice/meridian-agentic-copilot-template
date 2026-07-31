@@ -124,7 +124,13 @@ composer prompt in `package/build_meridian.py` is the authoritative field-by-fie
   it to `api/meridian_image.php` (one POST; Gemini image model server-side, key never in the package;
   cached by prompt hash so rehydrates and re-runs are instant) and renders the result full-width under
   the comparison grid with an honest "AI-generated visualization" caption + the LLM's own brief on
-  demand. Generation failure renders a visible error card with the raw payload — never stock art.
+  demand. **The generation is a demo beat the agent triggers**: a new brief arms a "Have the AI draw
+  the <option> in <name>'s world" button; the click generates (~6 s shimmer), and the agent can then
+  art-direct revisions or restore the original. Generation failure renders a visible error card with
+  the raw payload — never stock art. Loading choreography: the flow pushes `merStateStr` in stages
+  (profile-only the instant the CRM lands → situation + provisional duo after the catalog → the
+  composed panel), and the tile staggers each card's FIRST appearance (~420 ms apart, beats cascading
+  within the playbook) — rehydrates never replay the entrance.
   Static product shots (`img/aero14.png`, `img/titan16.png`) render at the top of each product card
   independently of this.
 - The tile is a **pure data-driven display**. It never reasons and never calls LLMs; its one outbound

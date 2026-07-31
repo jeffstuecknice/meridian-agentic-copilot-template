@@ -280,6 +280,11 @@
         run: function () { location.reload(); }
       },
       {
+        n: 0, label: 'Instant profile (PRE0 — profile only)',
+        note: 'What the flow now pushes the moment the CRM record lands, before the catalog: just the customer card.',
+        run: function () { push('merStateStr', { profile: PROFILE }); }
+      },
+      {
         n: 2, label: 'Pre-panel (profile + provisional product duo)',
         note: 'Zero-LLM instant view: profile + context + BOTH laptops with photos, unranked ("Option A/B", dashed borders). The composer’s ranked cards replace it.',
         run: function () { push('merStateStr', PRE_PANEL); }

@@ -215,6 +215,13 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   font-weight:700;padding:6px 12px;cursor:pointer;white-space:nowrap}
 .hero-orig{border:1px solid var(--ai-bd);border-radius:8px;background:#fff;color:var(--ai-deep);
   font-size:11px;padding:6px 10px;cursor:pointer;white-space:nowrap}
+.hero-cta{padding:9px 10px}
+.hero-draw{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;
+  border:none;border-radius:9px;padding:10px 12px;cursor:pointer;font-size:12px;font-weight:700;
+  color:#fff;background:linear-gradient(90deg,var(--ai),var(--blue));box-shadow:0 4px 14px rgba(134,48,232,.25)}
+.hero-draw svg{width:13px;height:13px;flex:0 0 13px}
+.hero-draw:hover{filter:brightness(1.06)}
+.beat.bstag{animation:cardIn .35s ease-out both}
 .hero-img.in{opacity:1;transform:none}
 .hero-cap{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 11px;
   font-size:10.5px;color:var(--ai-deep)}
@@ -574,13 +581,21 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       ? b + ' SCENE CHANGES — apply ALL of these and keep everything else about the scene identical: ' + HERO.revs.join('; ') + '.'
       : b;
   }
+  /* The image is a DEMO BEAT the agent triggers, not an auto-run: a new composer
+     brief arms the "draw it" button (state 'ready'); the click generates. Re-pushes
+     of the same brief never disturb whatever state the hero is in. */
   function tendHero() {
     var b = heroPrompt();
-    if (!b) return;
-    if (b !== HERO.base) { HERO.base = b; HERO.revs = []; }   // a new composer brief resets agent edits
+    if (!b || b === HERO.base) return;
+    HERO.base = b; HERO.revs = [];
+    HERO.sig = ''; HERO.url = ''; HERO.err = ''; HERO.showPrompt = false;
+    HERO.state = 'ready';
+  }
+  function heroGo() {
     var eff = heroEff();
-    if (eff === HERO.sig) return;
-    HERO.sig = eff; HERO.state = 'gen'; HERO.url = ''; HERO.err = ''; HERO.showPrompt = false;
+    if (!eff) return;
+    HERO.sig = eff; HERO.state = 'gen'; HERO.url = ''; HERO.err = '';
+    render();
     startHero(eff);
   }
   function heroRedraw() {
@@ -589,7 +604,7 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     if (!v) return;
     if (el) el.value = '';
     HERO.revs.push(v.slice(0, 140));
-    tendHero();
+    heroGo();
   }
   function startHero(mine) {
     var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
@@ -690,7 +705,19 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
      Every renderer returns an HTML string; newCard() gates entry animations
      to the FIRST appearance only, so re-renders never re-animate.
      ====================================================================== */
-  function newCard(k) { if (SEEN[k]) return ' seen'; SEEN[k] = 1; return ''; }
+  /* STAGED REVEAL — cards appearing for the FIRST time in one render pass enter
+     one after another (cardIn runs 'both', so each card stays hidden through its
+     delay). Re-pushes/rehydrates hit the SEEN ledger and never replay the show.
+     The return value quote-splices a style attr onto the class attr — the one
+     choke point every card renderer already flows through. */
+  var _rev = 0;                 // reset per render pass
+  var REVEAL_STEP = 420;        // ms between newly-appearing cards
+  function newCard(k) {
+    if (SEEN[k]) return ' seen';
+    SEEN[k] = 1;
+    var d = Math.min(_rev++ * REVEAL_STEP, 2100);
+    return d ? '" style="animation-delay:' + d + 'ms' : '';
+  }
 
   function sentColor(p) { return p >= 70 ? '#4ADE80' : (p >= 40 ? '#FBBF24' : '#F87171'); }
 
@@ -830,7 +857,11 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     if (!heroPrompt() || !HERO.state) return '';
     var name = lead && has(lead.name) ? lead.name : 'this pick';
     var h = '<div class="hero">';
-    if (HERO.state === 'gen') {
+    if (HERO.state === 'ready') {
+      /* the armed demo beat — the agent chooses the moment */
+      h += '<div class="hero-cta"><button type="button" class="hero-draw" data-act="hero-go">' + IC_SPARK +
+        '<span>Have the AI draw the ' + esc(name) + ' in ' + firstNameLabel() + '’s world</span></button></div>';
+    } else if (HERO.state === 'gen') {
       h += '<div class="hero-shimmer">' + IC_SPARK +
         '<span>' + (HERO.revs.length
           ? 'AI Agent is redrawing the scene — ' + esc(HERO.revs[HERO.revs.length - 1]) + '…'
@@ -884,13 +915,18 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     var list = beats();
     if (!list.length) return '';
     var act = firstActive(list);
+    var fresh = !SEEN['pb'];   // first time the playbook appears, beats cascade in one by one
+    /* beats offset from the CARD's own reveal delay (computed before newCard claims it),
+       otherwise their animations would finish while the parent is still hidden */
+    var cardDelay = fresh ? Math.min(_rev * REVEAL_STEP, 2100) : 0;
     var h = '<div class="mcard' + newCard('pb') + '"><div class="sec-hd"><span class="sec">Guided steps</span></div>';
     if (has(S.panel && S.panel.nextStepsIntro)) h += '<div class="pb-intro">' + esc(S.panel.nextStepsIntro) + '</div>';
-    list.forEach(function (b, i) { h += htmlBeat(b, i, act); });
+    list.forEach(function (b, i) { h += htmlBeat(b, i, act, fresh ? cardDelay : -1); });
     return h + '</div>';
   }
 
-  function htmlBeat(b, i, act) {
+  function htmlBeat(b, i, act, stagBase) {
+    var fresh = stagBase >= 0;
     var o = OV[b.id] || {};
     var isAct = isAction(b);
     var isDecl = !!o.declined;
@@ -899,9 +935,10 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       : isDecl ? 'declined'
         : isDone ? 'done'
           : (i === act ? 'active' : 'pending');
-    var cls = 'beat ' + state + (o.error ? ' failed' : '') + (o.foldNow ? ' folding' : '');
+    var cls = 'beat ' + state + (o.error ? ' failed' : '') + (o.foldNow ? ' folding' : '') + (fresh ? ' bstag' : '');
     var fn = firstName();
-    var h = '<div class="' + cls + '" data-beat="' + esc(b.id) + '">';
+    var h = '<div class="' + cls + '"' + (fresh ? ' style="animation-delay:' + (stagBase + 250 + Math.min(i * 150, 1200)) + 'ms"' : '') +
+      ' data-beat="' + esc(b.id) + '">';
 
     /* header row */
     h += '<div class="beat-hd">' +
@@ -1163,6 +1200,7 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     if (!force && s === _lastSig) return;   // no-op push → no flicker, no scroll loss
     _lastSig = s;
     CP = {};
+    _rev = 0;                               // staged reveal restarts per render pass
     var h = '';
     if (!S.panel) {
       h = htmlBootSkeleton();
@@ -1274,9 +1312,10 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     if (act === 'confirm-yes') { confirmBeat(id, true); return; }
     if (act === 'confirm-no') { confirmBeat(id, false); return; }
     if (act === 'hero-prompt') { HERO.showPrompt = !HERO.showPrompt; render(); return; }
-    if (act === 'hero-retry') { HERO.sig = ''; tendHero(); return; }
+    if (act === 'hero-go') { heroGo(); return; }
+    if (act === 'hero-retry') { heroGo(); return; }
     if (act === 'hero-redraw') { heroRedraw(); return; }
-    if (act === 'hero-orig') { HERO.revs = []; tendHero(); return; }
+    if (act === 'hero-orig') { HERO.revs = []; heroGo(); return; }
     if (act === 'ask-send') { submitInput('ask'); return; }
     if (act === 'cmd-send') { submitInput('command'); return; }
     if (act === 'ask-add') { addAskAsStep(id); return; }

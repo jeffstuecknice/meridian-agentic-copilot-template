@@ -101,6 +101,8 @@ POLQ = NID('0183'); POL_KS = NID('0184'); POL_EXC = NID('0185'); POL_LLM = NID('
 STG1_S = NID('01b1'); STG2_P = NID('01b2'); STG2_S = NID('01b3'); STG3_S = NID('01b4')
 # tile slot self-heal (second-contact slot race): re-push the shell at END of early turns
 T2_SW = NID('01b5'); T2_GO = NID('01b6'); T2_DEF = NID('01b7'); TILE2 = NID('01b8')
+# instant profile push — fires BEFORE the catalog fetch so the customer card is first on screen
+PRE0_P = NID('01b9'); PRE0_S = NID('01ba')
 CMP_P = NID('0190'); CMP = NID('0191'); MERGE = NID('0192'); PUSH_SW = NID('0193')
 PS_PUSH = NID('0194'); PS_DEF = NID('0195'); PUSH = NID('0196')
 CMP2 = NID('0197'); MERGE2 = NID('0198'); PUSH_SW2 = NID('0199')
@@ -273,6 +275,20 @@ PROD_POST = (
     "api.addToContext('merProdStr',prods.length?JSON.stringify(prods,null,1):'(catalog unavailable)','simple');\n"
     "api.addToContext('merProds',prods,'simple');\n"
     + ("api.log('[MER][PROD<] '+prods.length+' products','info');\n" if DEBUG else ""))
+
+# The instant PROFILE-ONLY push — fires the moment the CRM record lands, BEFORE the
+# catalog fetch, so the customer card is on screen while everything else assembles.
+# The tile's merge keeps it when richer pushes follow. Same gating as the pre-panel.
+PRE0_CODE = (
+    PROFILE_JS +
+    "if(!context.merPanelEsc && (context.merPanelN||0)===0 && context.merCrm){\n"
+    "  var rec=null;try{var _rj=JSON.parse(context.merCrmStr||'');if(_rj&&typeof _rj==='object')rec=_rj;}catch(e){}\n"
+    "  if(!rec)rec=context.merCrm||{};\n"
+    "  var pre0={profile:buildProfile(rec,context.merNick||'')};\n"
+    "  var es0=JSON.stringify(pre0).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
+    "  api.addToContext('merPre0Esc',es0,'simple');\n"
+    + ("  api.log('[MER][PRE0] instant profile push','info');\n" if DEBUG else "")
+    + "}else{api.addToContext('merPre0Esc','','simple');}\n")
 
 # Keyed on merPanelN===0 (not just an empty merPanelEsc) so a composer double-failure
 # mid-conversation can't overwrite the tile's last-good playbook with the skeleton.
@@ -1052,6 +1068,9 @@ def build():
     N.append((PROD_CDEF, node(PROD_CDEF, 'default', 'go', {})))
     N.append((PROD_H, node(PROD_H, 'httpRequest', 'Catalog - get_products', http_cfg('{{context.merProdUrl}}', 'merProdRaw'))))
     N.append((PROD_X, code_node(PROD_X, 'Catalog - extract', PROD_POST)))
+    N.append((PRE0_P, code_node(PRE0_P, 'Instant profile', PRE0_CODE)))
+    N.append((PRE0_S, node(PRE0_S, 'sendData', 'Push profile to tile',
+                           {'tileId': TILE_ID, 'json': '{"merStateStr":"{{context.merPre0Esc}}"}'})))
     N.append((PRE_P, code_node(PRE_P, 'Instant pre-panel', PRE_PANEL_CODE)))
     N.append((PRE_S, node(PRE_S, 'sendData', 'Push pre-panel to tile',
                           {'tileId': TILE_ID, 'json': '{"merStateStr":"{{context.merPreEsc}}"}'})))
@@ -1156,8 +1175,9 @@ def build():
         rel(CONVO_B, CONVO_S), rel(CONVO_S, REHYD), rel(REHYD, CRM_P),
         rel(CRM_P, CRM_SW),
         rel(CRM_SW, None, children=[CRM_CSKIP, CRM_CDEF]),
-        rel(CRM_CSKIP, PROD_P),
-        rel(CRM_CDEF, CRM_H), rel(CRM_H, CRM_X), rel(CRM_X, PROD_P),
+        rel(CRM_CSKIP, PRE0_P),
+        rel(CRM_CDEF, CRM_H), rel(CRM_H, CRM_X), rel(CRM_X, PRE0_P),
+        rel(PRE0_P, PRE0_S), rel(PRE0_S, PROD_P),
         rel(PROD_P, PROD_SW),
         rel(PROD_SW, None, children=[PROD_CSKIP, PROD_CDEF]),
         rel(PROD_CSKIP, PRE_P),
