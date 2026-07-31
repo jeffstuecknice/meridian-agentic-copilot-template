@@ -1,0 +1,14 @@
+FAC-POL-05 — Fathom Analytics Cloud: Billing Errors, Renewals & Price Locks
+Applies to: Starter, Pro and Scale plans. Effective 2026.
+
+Section 1 — Plans. Pro bills monthly per seat and flexes freely. The Business annual bundle bills yearly, includes priority support and a dedicated CSM, and prices at the equivalent of $75 per seat per month at 15 seats.
+
+Section 2 — Billing errors and renewal protections.
+2.1 Confirmed billing errors are reversed to the original payment method.
+2.2 A confirmed double-billing entitles Scale accounts to a service credit equal to 2× the overcharged amount, applicable to any invoice, in the same interaction the error is confirmed.
+2.3 Upgrades executed inside the renewal window lock current per-seat pricing for 24 months (Scale and above). The lock is written to the order.
+2.4 Upgrades co-term to the existing renewal date; unused monthly balances convert to credit.
+
+Section 3 — Seats. Seat increases take effect immediately; the Business bundle includes the 15th seat at no charge.
+
+Section 4 — Recommendation guidance. Recommend from the customer's actual seat math and stated flexibility needs. Show the per-seat arithmetic plainly. If month-to-month genuinely fits their uncertainty better, say so — never let the annual bundle's size outweigh a stated need to stay flexible.

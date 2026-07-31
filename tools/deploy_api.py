@@ -21,6 +21,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # repo root
 FILES = [
     os.path.join(HERE, 'api', 'meridian_api.php'),
     os.path.join(HERE, 'api', 'meridian_customers.php'),
+    os.path.join(HERE, 'api', 'meridian_scenarios.php'),
     os.path.join(HERE, 'api', 'meridian_xapp.php'),
     os.path.join(HERE, 'api', 'meridian_image.php'),            # generative hero images (Gemini)
     os.path.join(HERE, 'tile', 'meridian_copilot_tile.html'),   # SKIPped until the tile lands

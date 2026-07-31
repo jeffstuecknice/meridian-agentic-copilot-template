@@ -212,7 +212,13 @@ CRM_PREP = (
     "  if(pm){var rest=t0.slice(pm.index+pm[0].length);\n"
     "    var nm=rest.match(/^\\s*([A-Z][a-zA-Z'\\-]+(?:\\s+[A-Z][a-zA-Z'\\-]+)?)/);\n"
     "    if(nm){chatName=nm[1];break;}} }\n"
+    # tester hook: a customer id spoken/pasted in chat (cust_501) is the strongest signal of all —
+    # latest one wins and beats any earlier name capture (scenario switching by id).
+    "var chatId='';\n"
+    "for(var k=tx.length-1;k>=0;k--){var m0=String(tx[k].text||'').match(/\\bcust[_-]?(\\d{3,4})\\b/i);\n"
+    "  if(m0){chatId='cust_'+m0[1];break;}}\n"
     "var cid=context.merCid||'';\n"
+    "if(chatId){cid=chatId;chatName='';}\n"
     # no identify signal yet (contact accept / tile boot) -> demo default so the briefing builds
     # on the very first turn; a name spoken in chat later still wins (name-first lookup).
     "if(!cid && !chatName){cid='" + DEMO_DEFAULT_CID + "';"
@@ -242,14 +248,20 @@ CRM_POST = (
     "if(typeof r==='string'){try{r=JSON.parse(r);}catch(e){}}\n"
     "var rec=(r&&r.customer)||null;\n"
     "api.addToContext('merCrm',rec,'simple');\n"
+    "api.addToContext('merBrand',(rec&&rec.brand)||'Northlight Electronics','simple');\n"
     # masking-proof: context OBJECT values get PII-masked; the JSON STRING survives intact.
     "api.addToContext('merCrmStr',rec?JSON.stringify(rec,null,2):'(no customer identified yet)','simple');\n"
     + ("api.log('[MER][CRM<] '+(rec?(rec.name+' ('+rec.tier+')'):'NO RECORD'),'info');\n" if DEBUG else ""))
 
 PROD_PREP = (
-    "var url='" + MOCK_API + "?action=get_products';\n"
-    "api.addToContext('merProdUrl',url,'simple');\n"
-    "api.addToContext('merProdSkip',(!!context.merProdStr)?'skip':'go','simple');\n")
+    # per-scenario catalog: the customer's record decides which two options come back;
+    # skip only when the SAME url already loaded (a re-target must refetch the new duo).
+    "var rec=null;try{rec=JSON.parse(context.merCrmStr||'');}catch(e){}\n"
+    "var cid=(rec&&rec.customer_id)||'';\n"
+    "function q(v){return encodeURIComponent(v==null?'':String(v));}\n"
+    "var url='" + MOCK_API + "?action=get_products&customerId='+q(cid);\n"
+    "api.addToContext('merProdSkip',(!!context.merProdStr && url===context.merProdUrl)?'skip':'go','simple');\n"
+    "api.addToContext('merProdUrl',url,'simple');\n")
 
 PROD_POST = (
     "var raw=context.merProdRaw||{};\n"
@@ -274,12 +286,12 @@ PRE_PANEL_CODE = (
     "  if(prods.length>=2){cmpPre={provisional:true,\n"
     "    intro:'Both options are on the table \\u2014 the AI Agent will rank them from what '+nm+' says matters.',\n"
     "    products:prods.slice(0,2).map(function(p,i){return {sku:p.sku,name:p.name,price:p.price,rank:i+1,\n"
-    "      tag:i===0?'Option A':'Option B',provisional:true};})};}\n"
+    "      img:p.img||'',tag:i===0?'Option A':'Option B',provisional:true};})};}\n"
     "  var pre={profile:buildProfile(rec,context.merNick||''),\n"
     "    context:String(rec.escalation||''),\n"
     "    attempted:(rec.aiResolved||[]).map(function(t){return {t:t,k:'ok'};}),\n"
     "    needs:[],comparison:cmpPre,customerAsks:[],\n"
-    "    nextStepsIntro:'The AI Agent is reasoning over Northlight policy and the catalog\\u2026',recommendations:[]};\n"
+    "    nextStepsIntro:'The AI Agent is reasoning over '+((rec&&rec.brand)||'Northlight')+' policy and the catalog\\u2026',recommendations:[]};\n"
     "  var es=JSON.stringify(pre).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
     "  api.addToContext('merPanelEsc',es,'simple');\n"
     "  api.addToContext('merPreEsc',es,'simple');\n"
@@ -287,7 +299,7 @@ PRE_PANEL_CODE = (
     + "}else{api.addToContext('merPreEsc','','simple');}\n")
 
 GATE_PROMPT = (
-    "You are a routing classifier for a Northlight Electronics agent-assist copilot (consumer electronics retail). "
+    "You are a routing classifier for a {{context.merBrand}} customer-service agent-assist copilot. "
     "Read the CUSTOMER'S LATEST MESSAGE and choose EXACTLY one route:\n"
     "- \"request\": the customer wants the agent to DO something on their account/order — buy or order a product, decide/confirm which product to take, "
     "process or fix a return or refund, apply a credit or discount, price-match, change shipping, send a receipt (an action the agent performs).\n"
@@ -334,7 +346,7 @@ GATE_PARSE = (
     # real-stage stream: a 'go' decision starts a 10-15s brain run — tell the tile
     # what is actually happening at each boundary (never a fake spinner).
     "var st1='';\n"
-    "if(decision==='go'){st1=JSON.stringify({n:1,total:3,label:'Understood the request \\u2014 pulling Northlight policy'})"
+    "if(decision==='go'){st1=JSON.stringify({n:1,total:3,label:'Understood the request \\u2014 pulling '+(context.merBrand||'Northlight')+' policy'})"
     ".replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');}\n"
     "api.addToContext('merStg1Esc',st1,'simple');\n"
     + ("api.log('[MER][GATE] msg='+String(context.merGateMsg||'').slice(0,60)+' -> '+route+' -> '+decision,'info');\n" if DEBUG else ""))
@@ -346,8 +358,8 @@ STAGE2_CODE = (
     "  if(hv){if(Array.isArray(hv))nHits=hv.length;else if(Array.isArray(hv.topK))nHits=hv.topK.length;\n"
     "    else if(Array.isArray(hv.results))nHits=hv.results.length;}\n"
     "}catch(e){}\n"
-    "var lbl=nHits>0?('Reading Northlight policy \\u2014 '+nHits+' relevant sections found')"
-    ":'Reading Northlight policy';\n"
+    "var lbl=nHits>0?('Reading '+(context.merBrand||'Northlight')+' policy \\u2014 '+nHits+' relevant sections found')"
+    ":('Reading '+(context.merBrand||'Northlight')+' policy');\n"
     "var st2=JSON.stringify({n:2,total:3,label:lbl}).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
     "api.addToContext('merStg2Esc',st2,'simple');\n"
     + ("api.log('[MER][STAGE] 2/3 policy read ('+nHits+' hits)','info');\n" if DEBUG else ""))
@@ -355,9 +367,11 @@ STAGE2_CODE = (
 POLICY_QUERY = (
     "var rec=null;try{var _rj=JSON.parse(context.merCrmStr||'');if(_rj&&typeof _rj==='object')rec=_rj;}catch(e){}\n"
     "if(!rec)rec=context.merCrm||{};\n"
-    "var q=[rec.tier||'',(context.merGate&&context.merGate.query)||'',"
+    "var q=[rec.brand||'',rec.program||'',rec.tier||'',(context.merGate&&context.merGate.query)||'',"
     "(rec.openReturn&&rec.openReturn.item)?('return window '+rec.openReturn.item):'',"
-    "'return window loyalty tier benefits credit bundling recommendation guidance shipping'].join(' ').replace(/\\s+/g,' ').trim();\n"
+    # per-scenario retrieval hint from the CRM record; falls back to the retail boilerplate
+    "rec.policyKeywords||'return window loyalty tier benefits credit bundling recommendation guidance shipping'"
+    "].join(' ').replace(/\\s+/g,' ').trim();\n"
     "api.addToContext('merPolQuery',q.slice(0,300),'simple');\n"
     + ("api.log('[MER][POLICY>] KS query='+q.slice(0,120),'info');\n" if DEBUG else ""))
 
@@ -380,7 +394,7 @@ def KS_EXCERPTS(hit_key, out_key, tag):
         + ("api.log('[MER][" + tag + "] KS hits='+arr.length+' blob='+blob.length,'info');\n" if DEBUG else ""))
 
 POLICY_ANALYST_PROMPT = (
-    "You are the Northlight Policy Analyst for a live agent-assist copilot. Determine WHAT NORTHLIGHT POLICY ALLOWS for this case, "
+    "You are the {{context.merBrand}} Policy Analyst for a live agent-assist copilot. Determine WHAT {{context.merBrand}} POLICY ALLOWS for this case, "
     "grounded ONLY in the POLICY EXCERPTS below (retrieved from the Meridian Knowledge Store) — never invent a rule, window, amount, or fee.\n"
     "Identify each distinct thing the customer wants or the situation requires (a product decision, a return outside the standard window, "
     "credits applied to a purchase, price match, shipping/receipt), PLUS findings the playbook needs even if not asked "
@@ -391,7 +405,7 @@ POLICY_ANALYST_PROMPT = (
     "\"verdict\":\"allowed|capped|paid_addon|not_covered|escalate\", "
     "\"limit\":\"the CONCRETE figure/window for THIS customer's tier, e.g. '45-day accessory window' or '$189 store credit'\", "
     "\"quote\":\"ONE sentence copied VERBATIM from the excerpts that grants or caps this item — tier names, day counts and amounts exactly as "
-    "written; never paraphrase or invent\", \"source\":\"that document's title/id, e.g. 'MER-POL-02 Northlight Circle Loyalty'\", "
+    "written; never paraphrase or invent\", \"source\":\"that document's title/id, e.g. 'MER-POL-02 Loyalty Program' or 'AST-POL-01 Warranty & Goodwill'\", "
     "\"action\":\"the exec registry call to use: one of process_return_exception/apply_credit/place_order/send_receipt/escalate_case with key params\"}], "
     "\"summary\":\"one line\"}\n"
     "verdicts: 'allowed' (within the agent's authority; recommend doing it), 'capped' (the ask exceeds policy; give the MAXIMUM in limit), "
@@ -425,40 +439,40 @@ COMPOSER_PREP = (
     "api.addToContext('merStg3Esc',st3,'simple');\n")
 
 COMPOSER_PROMPT = (
-    "You are the Northlight Agentic Copilot assisting a LIVE Care specialist named Riley (you never speak to the customer; you drive a side panel). "
+    "You are the {{context.merBrand}} Agentic Copilot assisting a LIVE Care specialist named Riley (you never speak to the customer; you drive a side panel). "
     "The agent may apply any credit or exception whose authorizing policy clause is cited — recommend DOING what policy permits, never escalating what the agent can approve. "
     "Read the CUSTOMER RECORD, the PRODUCT CATALOG, the POLICY FINDINGS and the live conversation, then output the copilot panel as STRICT JSON with EXACTLY these keys:\n"
     "PREFERRED NAME: if a PREFERRED NAME is given below, ADDRESS THE CUSTOMER BY IT in EVERY conversational line you write (every say and sayDone, the greeting, the draftMessage) — first name only, warm and direct.\n"
     "profile: {initials, name, nickname, tier, meta, rightLabel, rightValue, stats:[{k,v}], badges:[{t,cls}]} — populate sensibly; a deterministic system overwrites it from the CRM record after you.\n"
     "context: one-paragraph situation summary (use the record's escalation + shopping fields so the customer never has to re-explain).\n"
     "needs: array of {id (stable slug e.g. 'battery'), label (2-4 words e.g. 'All-day battery'), quote (the customer's OWN words from the conversation or handoff that established this need — short verbatim fragment), weight ('high'|'med')}. ONLY needs the customer actually stated — never invent one. These render as chips above the comparison.\n"
-    "comparison: null until the customer's needs are known; then {intro (one short line framing the ranking BY THEIR NEEDS), products:[EXACTLY the two catalog laptops, ranked: {sku, name, price (number), rank (1 or 2), tag (short e.g. 'Best fit for you'|'The power option'), headline (one sentence: why this rank FOR THIS CUSTOMER), fit:[{need (a needs id), verdict:'wins'|'close'|'trails', why (short, cite the spec: '18 hr vs 9 hr')}], honest (REQUIRED — the single strongest reason to pick the OTHER product, stated plainly; per MER-POL-05 a comparison with no tradeoffs is not permitted)}], heroPrompt (REQUIRED once products are ranked: a 2-3 sentence image-generation brief that shows the rank-1 laptop living inside THIS customer's stated world — weave their top stated needs into the physical scene as place, light and objects, e.g. cafe table, boarding pass, camera, what's on the screen. Product-lifestyle photography style. HARD RULES: no readable text anywhere in the scene, no logos or brand names, no faces; the laptop is the hero object)}. Rank by the customer's STATED needs, not price or specs (MER-POL-05: fit beats basket size; never oversell — if the cheaper product fits better, it ranks first).\n"
+    "comparison: null until the customer's needs are known; then {intro (one short line framing the ranking BY THEIR NEEDS), products:[EXACTLY the two catalog options, ranked: {sku, name, price (number), rank (1 or 2), tag (short e.g. 'Best fit for you'|'The power option'), headline (one sentence: why this rank FOR THIS CUSTOMER), img (copy the catalog item's img field VERBATIM if present), fit:[{need (a needs id), verdict:'wins'|'close'|'trails', why (short, cite the spec/number: '18 hr vs 9 hr')}], honest (REQUIRED — the single strongest reason to pick the OTHER option, stated plainly; per the recommendation-guidance policy a comparison with no tradeoffs is not permitted)}], heroPrompt (REQUIRED once options are ranked: a 2-3 sentence image-generation brief that shows the rank-1 option living inside THIS customer's stated world — weave their top stated needs into the physical scene as place, light and objects. Lifestyle photography style. HARD RULES: no readable text anywhere in the scene, no logos or brand names, no faces; the chosen option is the hero of the scene)}. Rank by the customer's STATED needs, not price or specs (recommendation-guidance policy: fit beats basket size; never oversell — if the cheaper option fits better, it ranks first).\n"
     "attempted: array of {t, k:'ok'} — from the record's aiResolved plus anything the conversation shows already handled.\n"
     "customerAsks: array of {ask (SHORT phrase, one per distinct request), resolved (true ONLY if the transcript shows the AGENT addressed it), resolution (SHORT phrase of what was actually done; '' if not yet)}. RE-EVALUATE every turn.\n"
     "nextStepsIntro: one short sentence framing the guided playbook.\n"
     "recommendations: the ORDERED PLAYBOOK of conversational beats — a live, advancing checklist. The arc, in order:\n"
     "   1. (talk) GREET — the live agent's opening message (the customer was talking to the automated assistant and is now connected; the specialist speaks FIRST). Warm, by name, 'I can see your details and your conversation with our assistant' so they know they never repeat themselves.\n"
     "   2. (talk) EMPATHIZE — acknowledge the SPECIFIC situation. If the customer has voiced a frustration (e.g. a denied return), name it specifically and recognize their loyalty (tier/years). This is the beat whose say line the agent relays to trigger the heard moment.\n"
-    "   3. (talk) WALK THE COMPARISON — present the ranked recommendation conversationally: which laptop fits their stated needs and the one honest reason they might still pick the other. The say line must cite THEIR words, never read like a spec sheet.\n"
-    "   4. (action) FIX THE RETURN — when the POLICY FINDINGS show the customer's denied/open return is actually eligible (e.g. a loyalty-tier window), ONE beat that processes the return exception AND applies the refund as store credit: exec:{actions:[{action:'process_return_exception',params:{orderRef,item,amount,clause,reason}},{action:'apply_credit',params:{amount,unit:'USD',reason}}]}. Cite the clause in detail and policyQuote. Do NOT set offer — fixing their return needs no acceptance.\n"
-    "   5. (action) PLACE THE ORDER — once the customer has chosen (or accepted the recommendation), ONE beat: exec:{actions:[{action:'place_order',params:{sku,creditApplied,shipMethod}}]} with offer:true (the customer's explicit yes authorizes the purchase; state the price AFTER credit in the say line). If the return credit exists, apply it here (creditApplied) and say so — MER-POL-02 \\u00a74.1 lets the credit apply in the same conversation.\n"
-    "   6. (action) SEND THE RECEIPT — after the order: exec:{actions:[{action:'send_receipt',params:{name,detail,total,orderRef}}]} where detail is 'title \\u2014 REF|title \\u2014 REF' rows of what was done. Its sayDone tells the agent the receipt link is ready to paste into the chat.\n"
+    "   3. (talk) WALK THE COMPARISON — present the ranked recommendation conversationally: which option fits their stated needs and the one honest reason they might still pick the other. The say line must cite THEIR words, never read like a spec sheet.\n"
+    "   4. (action) MAKE IT RIGHT — when the POLICY FINDINGS show the customer's past sore point (a denied return/claim, a wrong charge, a missed appointment, a miscoded record) is actually eligible for an exception or adjustment, ONE beat that executes the fix: use process_return_exception for ANY reversal/resubmission/goodwill-case {orderRef,item,amount,clause,reason} and/or apply_credit {amount,unit,reason} as the findings dictate. Cite the clause in detail and policyQuote. Do NOT set offer — making it right needs no acceptance.\n"
+    "   5. (action) BOOK IT — once the customer has chosen (or accepted the recommendation), ONE beat for the main order/booking/enrollment/switch: exec:{actions:[{action:'place_order',params:{sku,creditApplied,shipMethod}}]} with offer:true (the customer's explicit yes authorizes it; state the price/terms AFTER any credit in the say line). If a make-right credit exists and the findings' credit-bundling clause allows it, apply it here (creditApplied) and say so, citing that clause.\n"
+    "   6. (action) SEND THE CONFIRMATION — after the booking: exec:{actions:[{action:'send_receipt',params:{name,detail,total,orderRef}}]} where detail is 'title \\u2014 REF|title \\u2014 REF' rows of what was done. Its sayDone tells the agent the confirmation link is ready to paste into the chat.\n"
     "CUSTOMER REQUESTS — CRITICAL: whenever the CUSTOMER explicitly asks for something specific NOT already covered by a beat, ADD a dedicated (action) beat for THAT request at the END of the playbook, named after what they asked. Resolve it per the POLICY FINDINGS: allowed -> exec it; 'capped' -> do NOT auto-apply; OFFER the MAXIMUM policy permits (offer:true, say phrased as the offer, sayDone as the confirmation, exec at the cap). 'paid_addon' -> charge:true + chargeLabel + offer:true. 'escalate'/'not_covered'/no finding -> STILL add the beat with exec:{actions:[{action:'escalate_case',params:{summary,queue:'Care lead'}}]} and a say line that honestly says you're checking — never silently drop a request, never invent an outcome. Stable id derived from the request (e.g. 'req-price-match'). If a CURRENT PLAYBOOK list is provided, reuse those EXACT ids and labels for the same steps — never reword one into a near-duplicate.\n"
     "Each beat = {id (stable slug), label (short imperative), kind ('talk'|'action'), status ('done'|'active'|'pending'), offer (optional boolean — true ONLY when the customer must ACCEPT before it executes), confirmGated (optional boolean — true for a beat that must WAIT for the customer's explicit yes/no), charge (optional boolean), chargeLabel (paid add-ons only), "
     "say (ALWAYS populate — the EXACT customer-facing line the agent RELAYS for THIS beat, warm, 1-2 sentences, ready to paste. ACTION beats: the line said BEFORE doing it), "
     "sayDone (ACTION beats ONLY — the good-news line AFTER it succeeds, with the CONCRETE result: dollar amounts, the order total after credit, references; for send_receipt include that the link is ready to share), "
-    "detail (one short internal why for the agent; cite the MER-POL rule id on action beats), "
+    "detail (one short internal why for the agent; cite the policy rule id on action beats), "
     "running (action beats: present-tense policy-checking title, e.g. 'Checking policy & processing\\u2026'), "
-    "substeps (action beats: MAX 3 short steps that LEAD with the policy check — cite the MER-POL rule id and what it permits, then the operational steps), "
+    "substeps (action beats: MAX 3 short steps that LEAD with the policy check — cite the policy rule id and what it permits, then the operational steps), "
     "exec (action beats ONLY: {actions:[{action:'process_return_exception'|'apply_credit'|'place_order'|'send_receipt'|'escalate_case', params:{...}}]} — an ARRAY, one entry per system call, in order; param shapes: process_return_exception={orderRef,item,amount,clause,reason}; apply_credit={amount,unit,reason}; place_order={sku,creditApplied,shipMethod}; send_receipt={name,detail,total,orderRef}; escalate_case={summary,queue}; ALL param values are strings), "
-    "policyQuote (action beats that execute something ONLY — {ruleId, quote (the matching finding's quote VERBATIM — never reworded, never with changed numbers), source:'Northlight Policy Library \\u00b7 ' + the finding's source}. If the matching finding has no quote, omit policyQuote)}.\n"
+    "policyQuote (action beats that execute something ONLY — {ruleId, quote (the matching finding's quote VERBATIM — never reworded, never with changed numbers), source:'{{context.merBrand}} Policy Library \\u00b7 ' + the finding's source}. If the matching finding has no quote, omit policyQuote)}.\n"
     "COMPUTE STATUS BY READING THE TRANSCRIPT each turn: a TALK beat is 'done' if the AGENT's messages show they already expressed that beat's intent (match on meaning). A confirmGated beat is NEVER 'done' until the customer explicitly answered. ACTION beats are advanced by the tile — set status 'pending' unless the transcript clearly shows it handled. The FIRST not-done beat is 'active'; everything after is 'pending'. If the conversation just started, GREET is active.\n"
     "draftMessage: the single ready-to-send OUTBOUND message for AFTER the actions execute — warm, by preferred name, concrete results in one paragraph (what was returned, the credit, the order + total + ship date, the receipt link placeholder '<receipt link>').\n"
     "VOICE — every customer-facing line must be genuinely NICE, not merely polite: warm, human, personal. Open with their first name; take gracious ownership ('leave this with me', 'I've got you'); thank them for their loyalty where it fits; acknowledge the specific inconvenience with real empathy; deliver good news with genuine delight. No corporate stiffness, no exclamation-mark overload, never saccharine.\n"
     "BE TIGHT: say/sayDone max 2 sentences, detail one clause, substeps MAX 3, context max 3 sentences, needs max 5.\n"
     "Output ONLY the JSON object with EXACTLY these top-level keys and NO others: profile, context, needs, comparison, attempted, customerAsks, nextStepsIntro, recommendations, draftMessage. No prose, no code fences.\n\n"
-    "POLICY FINDINGS (grounded in the Meridian Knowledge Store — your policy source of truth; cite its MER-POL rule ids; if a needed finding is missing, be conservative and escalate rather than inventing policy):\n{{context.merPolicyStr}}\n\n"
-    "PRODUCT CATALOG (live from Northlight systems — SOURCE OF TRUTH for prices, specs, stock):\n{{context.merProdStr}}\n\n"
+    "POLICY FINDINGS (grounded in the policy Knowledge Store — your policy source of truth; cite its rule ids exactly as given; if a needed finding is missing, be conservative and escalate rather than inventing policy):\n{{context.merPolicyStr}}\n\n"
+    "PRODUCT CATALOG (live from {{context.merBrand}} systems — SOURCE OF TRUTH for prices, specs, availability):\n{{context.merProdStr}}\n\n"
     "CUSTOMER RECORD (from the CRM — SOURCE OF TRUTH; the customer should NOT re-explain any of it):\n{{context.merCrmStr}}\n\n"
     "{{context.merNickLine}}\n"
     "{{context.merPlaybookLine}}\n"
@@ -539,7 +553,7 @@ X_RES_CODE = (
     "  var r=(raw&&typeof raw.result==='object'&&raw.result)?raw.result:((raw&&typeof raw.body==='object'&&raw.body)?raw.body:raw);\n"
     "  if(typeof r==='string'){try{r=JSON.parse(r);}catch(e){}}\n"
     "  var exd=(r&&r.executed)||[];\n"
-    "  if(!exd.length){out.narration='ERROR: the Northlight systems returned no execution result.';api.log('[MER][EXEC<] empty result','error');}\n"
+    "  if(!exd.length){out.narration='ERROR: the '+(context.merBrand||'Northlight')+' systems returned no execution result.';api.log('[MER][EXEC<] empty result','error');}\n"
     "  else{\n"
     "    out.ok=(r.ok===true);\n"
     "    for(var i=0;i<exd.length;i++){var e1=exd[i]||{};var d=e1.detail||{};var sum='';\n"
@@ -551,7 +565,7 @@ X_RES_CODE = (
     "      else{sum=e1.ok?'Done':'Failed';}\n"
     "      out.executed.push({action:e1.action,ref:e1.ref||'',ok:(e1.ok===true),summary:sum,receiptUrl:(d.receiptUrl||undefined),total:(d.total!=null?d.total:undefined)});\n"
     "    }\n"
-    "    out.narration='Executed '+out.executed.length+' action'+(out.executed.length>1?'s':'')+' with Northlight systems.';\n"
+    "    out.narration='Executed '+out.executed.length+' action'+(out.executed.length>1?'s':'')+' with '+(context.merBrand||'Northlight')+' systems.';\n"
     "  }\n"
     "}\n"
     "var es=JSON.stringify(out).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
@@ -575,7 +589,7 @@ Q_PREP_CODE = (
     + ("api.log('[MER][ASK>] (auto) '+String(context.merAskQuery||''),'info');\n" if DEBUG else ""))
 
 KB_ANSWER_PROMPT = (
-    "You are the Northlight knowledge assistant for a live Care agent. Answer the QUESTION for the agent, grounded ONLY in the "
+    "You are the {{context.merBrand}} knowledge assistant for a live Care agent. Answer the QUESTION for the agent, grounded ONLY in the "
     "POLICY EXCERPTS and the PRODUCT CATALOG below — never invent a spec, price, window, or rule. If neither source covers it, "
     "say so honestly and set escalate true.\n"
     "Output STRICT JSON only: {\"askId\":\"{{context.merAskId}}\", \"title\":\"<3-6 word topic>\", "
@@ -700,7 +714,7 @@ CT_RES_CODE = (
 CM_FIN_CODE = (
     "var ex=context.merExecLog||[];\n"
     "var out={recId:'command',ok:ex.length>0&&ex.every(function(e){return e.ok;}),\n"
-    "  narration:(ex.length?('Executed '+ex.length+' action'+(ex.length>1?'s':'')+' with Northlight systems.'):'ERROR: the command produced no executed actions.'),\n"
+    "  narration:(ex.length?('Executed '+ex.length+' action'+(ex.length>1?'s':'')+' with '+(context.merBrand||'Northlight')+' systems.'):'ERROR: the command produced no executed actions.'),\n"
     "  executed:ex.map(function(e){return {action:e.action,ref:e.ref,ok:e.ok,summary:e.summary,receiptUrl:e.receiptUrl};})};\n"
     "var es=JSON.stringify(out).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
     "api.addToContext('merExecEsc',es,'simple');\n"

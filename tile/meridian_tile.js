@@ -749,11 +749,14 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     h += '<div class="cmp-grid">';
     prods.forEach(function (pr) {
       var lead = pr.rank === 1 && !isProv;
-      var imgFile = skuImg(pr.sku);
+      /* catalog-driven image first (any scenario), sku-map fallback (the laptops);
+         bare filenames resolve against IMG_BASE, https URLs pass through */
+      var imgSrc = (typeof pr.img === 'string' && pr.img.trim()) ? pr.img.trim() : skuImg(pr.sku);
+      if (imgSrc && !/^https:\/\//.test(imgSrc)) imgSrc = IMG_BASE + imgSrc.replace(/^\/+/, '');
       h += '<div class="prod' + (lead ? ' lead' : '') + (isProv ? ' prov' : '') + '">' +
         '<div class="prod-tag">' + esc(pr.tag || (isProv ? 'On the table' : (lead ? 'Best fit for you' : 'The alternative'))) + '</div>' +
         '<div class="prod-bd">' +
-        (imgFile ? '<div class="prod-img"><img alt="' + esc(pr.name) + '" data-imgfall src="' + IMG_BASE + imgFile + '"></div>' : '') +
+        (imgSrc ? '<div class="prod-img"><img alt="' + esc(pr.name) + '" data-imgfall src="' + esc(imgSrc) + '"></div>' : '') +
         '<div class="prod-nm"><span class="n">' + esc(pr.name) + '</span><span class="p">' + fmt$(pr.price) + '</span></div>' +
         (has(pr.headline) ? '<div class="prod-hl">' + esc(pr.headline) + '</div>' : '');
       if (pr.fit && pr.fit.length) {
@@ -1254,7 +1257,7 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       label: 'Cover: ' + (a.a.title || 'knowledge answer'),
       kind: 'talk', status: 'pending', say: say,
       detail: 'From the knowledge lookup — ' +
-        (((a.a.sources || []).map(function (s2) { return s2.id; }).join(', ')) || 'Northlight policy library')
+        (((a.a.sources || []).map(function (s2) { return s2.id; }).join(', ')) || 'the policy library')
     };
     if (/\?\s*$/.test(say.trim())) beat.confirmGated = true;
     if (!S.added.some(function (b2) { return b2.id === beat.id; })) S.added.push(beat);
@@ -1576,9 +1579,15 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     var pend = findAsk(String(a.askId || ''));
     if (pend) { pend.status = 'done'; pend.a = a; }
     else {
-      /* flow-initiated (auto-gate) answer — dedupe by title */
+      /* flow-initiated answer = the CUSTOMER asked this in chat (the gate routed it) —
+         dedupe by title, then AUTO-ADD it as a recommended step: answering the
+         customer's question is part of the playbook, not an optional click */
       var dup = S.asks.some(function (x) { return x.a && x.a.title === a.title; });
-      if (!dup) S.asks.push({ askId: String(a.askId || ('auto-' + (++_askSeq))), q: '', status: 'done', a: a });
+      if (!dup) {
+        var aid = String(a.askId || ('auto-' + (++_askSeq)));
+        S.asks.push({ askId: aid, q: '', status: 'done', a: a });
+        addAskAsStep(aid);
+      }
     }
     render();
     scrollToBottom();

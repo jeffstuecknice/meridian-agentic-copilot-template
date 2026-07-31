@@ -1,0 +1,15 @@
+MTB-POL-01 — Meridian Trust Bank: Wires, Cutoffs & Expedited Verification
+Applies to: Everyday, Plus and Summit Private relationships. Effective 2026.
+
+Section 1 — Same-day wires. Domestic wires released before 5:00 PM ET settle same day, typically within two hours of release. The standard wire fee is $35.
+
+Section 2 — Cashier's checks. Cashier's checks with overnight courier arrive the next business day by 10:30 AM; total cost $48.
+
+Section 3 — Fraud review holds. Transfers may be held for verification when flagged. Standard verification requires a branch visit or a callback within 4 business hours.
+
+Section 5 — Summit Private servicing.
+5.1 Summit Private wires receive expedited verification: a verification callback is initiated within 15 minutes of the request, and the same-day wire fee is waived. Wires pre-verified in an active service interaction release without further holds.
+5.2 A prior false-positive fraud hold on the relationship entitles the client to pre-verification at request time — the review happens before release, never after.
+5.3 Fee waivers under 5.1 may be applied in the same interaction as the wire request.
+
+Section 6 — Recommendation guidance. Recommend from the client's stated deadline. Where a deadline makes one instrument unfit (for example a next-day check against a same-day closing), state that plainly. Never let a fee difference outweigh a stated hard deadline.

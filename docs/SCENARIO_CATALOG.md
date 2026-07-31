@@ -147,6 +147,47 @@ stage stream, and execute path don't change.
 
 ---
 
+## Live test drives — pastable openers (ALL NINE ARE BUILT AND LIVE)
+
+Every scenario below is data-complete in the mock API (`meridian_scenarios.php`), has its policy
+doc in `knowledge/upload/`, and its product shots on the host. **Select a scenario by pasting its
+customer id anywhere in the chat (`cust_801`) or by name ("This is Maggie Sullivan")** — the CRM,
+catalog duo, photos, policy retrieval and brand voice all follow the record. Turn 1 states the
+needs (ranks the comparison); turn 2 raises the sore point (sentiment dip → HEARD → the clause
+card). Approve/offer/receipt clicks work exactly like the Maya arc.
+
+```
+cust_201 (Dana): I'm cust_201, Dana Whitfield. I fly to Lisbon Monday and need to pick between the Global Unlimited plan and just adding the Europe pass. I travel internationally about twice a month and my phone is the hotspot for my laptop — and I can't have another surprise bill.
+cust_201 sore point: Last trip your store told me I was covered and I still got hit with an $84 roaming charge. That has to be fixed before we talk plans.
+
+cust_301 (Ruth): This is Ruth Nakamura, cust_301. My water heater leaked into the hall closet and I can't decide whether to file a claim or just pay the contractor myself. I've been claim-free nine years and I don't want my rate going up.
+cust_301 sore point: Honestly, after my 2019 claim got denied for being four days late, I almost didn't call at all. That experience still bothers me.
+
+cust_401 (Andre): This is Andre Boyd, cust_401. I close on my house at 3 PM TODAY and need my down payment at the title company — wire or cashier's check, whatever is certain to make it.
+cust_401 sore point: Last month you froze a perfectly normal transfer as fraud and I lost an hour at a branch. If that happens today I lose the house.
+
+cust_501 (Priya): This is Priya Raman, cust_501. I got an EV two weeks ago, I charge overnight on weeknights and my rooftop solar covers the day — which rate should I actually be on, time-of-use or flat?
+cust_501 sore point: My first bill after the car came was $120 higher and nobody warned me the standard rate would do that. That month needs to be made right.
+
+cust_601 (Elena): This is Elena Webb, cust_601. It's our 10th anniversary weekend after next — I really want the sunset dinner, Marcus wants the spa day, and we'd like to stay around $750.
+cust_601 sore point: Also, last stay in March your front desk refused the late checkout my tier is supposed to guarantee. I had a 1 PM flight and sat in the lobby.
+
+cust_701 (Jordan): This is Jordan Lee, cust_701. We're growing from 8 to 14 seats before Q4 and I need the real math on the Business annual bundle versus staying monthly on Pro.
+cust_701 sore point: Before anything else — last renewal you billed us twice and it took three weeks to reverse. I need to trust the billing before I sign anything annual.
+
+cust_801 (Maggie): This is Maggie Sullivan, cust_801. Biscuit's limping after fetch but it's slowly improving, and I fly Friday — do I take the orthopedic consult tomorrow morning or the regular vet Thursday?
+cust_801 sore point: I'm honestly scared to use the insurance at all after you called his checkup "pre-existing" last year and denied my claim. That was a coding mistake and it never got fixed.
+
+cust_901 (Victor): This is Victor Reyes, cust_901. My transmission failed at 61,200 miles — 1,200 past the warranty. The dealer wants $3,200. I planned to keep this car five more years for my son, but maybe I should just take the trade-in.
+cust_901 sore point: Here's what gets me: I reported the shift hesitation DURING the recall visit last year, while it was still under warranty. Your own shop wrote it down and did nothing.
+
+cust_1001 (Amara): This is Amara Diallo, cust_1001. I move across town Friday and I'm on client video calls Monday at 9 AM sharp — Saturday tech visit or the self-install kit? The building's older and I have no idea what the wiring's like.
+cust_1001 sore point: Last install your tech missed the entire four-hour window and I lost a workday. I can't gamble like that with this move.
+```
+
+Universal extras that work in every scenario: ask any policy question as the customer (it auto-adds
+to the guided steps), and watch the hero image personalize to that customer's world.
+
 ## Picking your first re-skin
 
 - **Fastest wow:** 7 (Biscuit) — the hero image sells itself; the resubmit-the-miscoded-claim

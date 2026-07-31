@@ -7,12 +7,16 @@
  * Included by meridian_api.php (get_customer).
  */
 
+require_once __DIR__ . '/meridian_scenarios.php';
+
 function meridian_customers() {
-  return [
+  return array_merge([
 
     'cust_101' => [
       'name'         => 'Maya Torres',
       'initials'     => 'MT',
+      'brand'        => 'Northlight Electronics',
+      'program'      => 'Northlight Circle (Member › Plus › Summit)',
       'tier'         => 'Summit',
       'memberSince'  => 2023,
       'ordersYtd'    => 11,
@@ -70,6 +74,8 @@ function meridian_customers() {
     'cust_102' => [
       'name'         => 'Leo Martinez',
       'initials'     => 'LM',
+      'brand'        => 'Northlight Electronics',
+      'program'      => 'Northlight Circle (Member › Plus › Summit)',
       'tier'         => 'Member',
       'memberSince'  => 2026,
       'ordersYtd'    => 1,
@@ -98,7 +104,7 @@ function meridian_customers() {
       ],
     ],
 
-  ];
+  ], meridian_scenario_customers());
 }
 
 // Look up a record by name first (a name spoken in chat is the strongest live signal and

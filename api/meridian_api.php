@@ -42,7 +42,7 @@ function meridian_catalog() {
       'performance' => 'Great for photo editing and light video',
       'ports' => '2× USB-C', 'sdSlot' => false,
       'sdSlotNote' => 'No SD slot — the $29 USB-C SD reader closes the gap',
-      'inStock' => true, 'shipsToday' => true,
+      'inStock' => true, 'shipsToday' => true, 'img' => 'aero14.png',
     ],
     'NL-TITAN16' => [
       'sku' => 'NL-TITAN16', 'name' => 'Titan 16', 'price' => 1899.00,
@@ -50,7 +50,7 @@ function meridian_catalog() {
       'performance' => 'Workstation-class — heavy video and 3D',
       'ports' => '2× USB-C · HDMI · SD slot', 'sdSlot' => true,
       'sdSlotNote' => 'Built-in SD slot — a genuine pull for photographers',
-      'inStock' => true, 'shipsToday' => true,
+      'inStock' => true, 'shipsToday' => true, 'img' => 'titan16.png',
     ],
   ];
 }
@@ -142,8 +142,25 @@ switch ($action) {
   }
 
   case 'get_products': {
-    out(['ok' => true, 'action' => 'get_products',
-         'products' => array_values(meridian_catalog()), 'ts' => date('c')]);
+    // Per-scenario catalog: the customer's record names their duo (shopping.considering);
+    // no customer (or unknown skus) falls back to the retail laptops.
+    $full = array_merge(meridian_catalog(), meridian_catalog_extra());
+    $cid = val($P, 'customerId', val($P, 'customer_id', ''));
+    $items = [];
+    if ($cid !== '') {
+      $rec = meridian_lookup($cid, '');
+      if ($rec && isset($rec['shopping']['considering']) && is_array($rec['shopping']['considering'])) {
+        foreach ($rec['shopping']['considering'] as $sku) { if (isset($full[$sku])) $items[] = $full[$sku]; }
+      }
+    }
+    if (count($items) < 2) $items = array_values(meridian_catalog());
+    out(['ok' => true, 'action' => 'get_products', 'products' => $items, 'ts' => date('c')]);
+  }
+
+  case 'catalog_all': {
+    // tooling endpoint: the full item map (used by tools/gen_catalog_images.py)
+    out(['ok' => true, 'action' => 'catalog_all',
+         'items' => array_merge(meridian_catalog(), meridian_catalog_extra()), 'ts' => date('c')]);
   }
 
   case 'execute_batch': {
