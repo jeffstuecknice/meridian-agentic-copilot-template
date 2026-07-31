@@ -109,11 +109,21 @@ comparison in hand.
 ### 4a. Panel object (what `merStateStr` carries)
 
 `{profile, context, needs:[{id,label,quote,weight}], comparison:{intro, products:[2 ranked cards with
-fit[] verdicts + an honest tradeoff]}, attempted, customerAsks, nextStepsIntro, recommendations:[beats
-with say/sayDone/detail/running/substeps/exec/policyQuote], draftMessage}` — the composer prompt in
-`package/build_meridian.py` is the authoritative field-by-field contract.
-- The tile is a **pure data-driven display**. It never reasons, never calls LLMs, and renders whatever
-  the flow sends. It renders only in real CXone Agent Workspace (not Cognigy's Interaction Panel — the
+fit[] verdicts + an honest tradeoff], heroPrompt}, attempted, customerAsks, nextStepsIntro,
+recommendations:[beats with say/sayDone/detail/running/substeps/exec/policyQuote], draftMessage}` — the
+composer prompt in `package/build_meridian.py` is the authoritative field-by-field contract.
+- **`comparison.heroPrompt` — the generative hero image.** "LLMs decide; code executes," applied to
+  imagery: the composer AUTHORS a personalized image brief from the customer's stated needs (their
+  café, their boarding pass, their editing app — no readable text, no logos, no faces); the tile hands
+  it to `api/meridian_image.php` (one POST; Gemini image model server-side, key never in the package;
+  cached by prompt hash so rehydrates and re-runs are instant) and renders the result full-width under
+  the comparison grid with an honest "AI-generated visualization" caption + the LLM's own brief on
+  demand. Generation failure renders a visible error card with the raw payload — never stock art.
+  Static product shots (`img/aero14.png`, `img/titan16.png`) render at the top of each product card
+  independently of this.
+- The tile is a **pure data-driven display**. It never reasons and never calls LLMs; its one outbound
+  call executes the composer's image brief verbatim (display work — the thinking already happened in
+  the flow), and it renders whatever the flow sends. It renders only in real CXone Agent Workspace (not Cognigy's Interaction Panel — the
   flow still runs there, which is how you test the brain).
 
 ## 5. Session semantics (the single-flow caveats, handled)

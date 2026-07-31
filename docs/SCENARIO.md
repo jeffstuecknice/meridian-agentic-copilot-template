@@ -90,9 +90,13 @@ Customer lines are what the tester pastes (they trigger the flow). Agent lines r
 
 *Look for:* needs chips appear (battery ★, portability ★, photo editing, occasional video).
 
-**Beat 3 — propose (showpiece).** Comparison cards render: **Aero 14 ranked #1** with per-need reasoning
-tied to her words; Titan 16 card honest ("wins on raw power and the SD slot — but 9 hr battery vs your
-stated dealbreaker"). Tell line for Riley to say.
+**Beat 3 — propose (showpiece).** Comparison cards render with product photos: **Aero 14 ranked #1**
+with per-need reasoning tied to her words; Titan 16 card honest ("wins on raw power and the SD slot —
+but 9 hr battery vs your stated dealbreaker"). Tell line for Riley to say. Then the second showpiece
+blooms in ~8–15 s later: an **AI-generated scene of the Aero 14 living Maya's day** (café window light,
+camera and boarding pass, editing app on screen) — the composer wrote the image brief from her stated
+needs, the mock API's Gemini endpoint executed it, and the card says so honestly ("AI-generated
+visualization", with the brief viewable). Generation failure shows a visible error, never stock art.
 
 **Beat 4 — sentiment dip + HEARD.**
 > **Maya:** Before I buy anything though — I'm still annoyed about that docking station I tried to return

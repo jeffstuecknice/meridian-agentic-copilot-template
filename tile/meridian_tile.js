@@ -163,6 +163,33 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
 .honest-in{border-top:1px dashed var(--bd);padding-top:8px}
 .honest .hl{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--warn)}
 .honest .ht{font-size:10.5px;font-style:italic;color:var(--ink-2);line-height:1.45;margin-top:3px}
+.prod-img{margin:0 0 8px;border-radius:8px;overflow:hidden;background:var(--page)}
+.prod-img img{display:block;width:100%;height:84px;object-fit:cover}
+
+/* ---------- generative hero — the AI-drawn "your day with this laptop" scene ---------- */
+.hero{margin-top:10px;border:1px solid var(--ai-bd);border-radius:12px;overflow:hidden;background:var(--ai-bg2)}
+.hero-shimmer{display:flex;gap:8px;align-items:center;padding:20px 14px;font-size:11.5px;color:var(--ai-deep);
+  background:linear-gradient(100deg,var(--ai-bg) 40%,#EFE3FC 50%,var(--ai-bg) 60%);
+  background-size:200% 100%;animation:mer-shim 1.5s linear infinite}
+.hero-shimmer svg{width:13px;height:13px;flex:0 0 13px}
+@keyframes mer-shim{to{background-position:-200% 0}}
+.hero-imgwrap{max-height:200px;overflow:hidden;background:var(--ai-bg)}
+.hero-img{display:block;width:100%;object-fit:cover;opacity:0;transform:scale(1.02);
+  transition:opacity .9s ease,transform 1.4s ease}
+.hero-img.in{opacity:1;transform:none}
+.hero-cap{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 11px;
+  font-size:10.5px;color:var(--ai-deep)}
+.hero-cap .hc-l{display:flex;align-items:center;gap:5px;min-width:0}
+.hero-cap svg{width:11px;height:11px;flex:0 0 11px}
+.hero-why{border:none;background:none;color:var(--ai);font-size:10.5px;cursor:pointer;
+  text-decoration:underline;padding:0;white-space:nowrap}
+.hero-brief{padding:0 12px 10px;font-size:11px;font-style:italic;color:var(--ink-2);line-height:1.5}
+.hero-err{padding:12px 14px}
+.hero-err .he-t{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--err)}
+.hero-err .he-d{font-size:11px;color:var(--ink-2);margin:4px 0 9px;line-height:1.45;word-break:break-word;
+  font-family:var(--mono)}
+.hero-retry{border:1px solid var(--err-bd);background:#fff;color:var(--err);border-radius:8px;
+  padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer}
 
 /* ---------- playbook beats ---------- */
 .pb-intro{font-size:12px;color:var(--ink-2);margin-bottom:9px;line-height:1.45}
@@ -480,6 +507,60 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   var _lastSig = '';     // no-op re-push guard
   var _sentAnimated = false;
 
+  /* ---- generative hero image (the AI-drawn "your day with this laptop" scene) ----
+     The composer authors comparison.heroPrompt from the customer's stated needs
+     (LLMs decide); the tile hands it to the image endpoint and displays the result
+     (code executes). Sig-guarded on the prompt string so rehydrates never regenerate;
+     the endpoint caches by prompt hash so even a tile reload costs nothing. */
+  var GEN_URL = 'https://aicoe.3ddesignview.com/demo/cognigy_copilot/mock_api_meridian/meridian_image.php';
+  var IMG_BASE = 'https://aicoe.3ddesignview.com/demo/cognigy_copilot/mock_api_meridian/img/';
+  /* keys are normalized (uppercase, alphanumeric only) so 'NL-AERO14', 'NL-AERO-14'
+     and 'nl aero 14' all resolve — composer SKU spelling must never hide a photo */
+  var SKU_IMG = { 'NLAERO14': 'aero14.png', 'NLTITAN16': 'titan16.png' };
+  function skuImg(sku) {
+    return SKU_IMG[String(sku == null ? '' : sku).toUpperCase().replace(/[^A-Z0-9]/g, '')] || '';
+  }
+  var HERO = { sig: '', state: '', url: '', err: '', showPrompt: false };
+
+  function heroPrompt() {
+    var c = S.panel && S.panel.comparison;
+    return (c && typeof c.heroPrompt === 'string' && c.heroPrompt.trim()) ? c.heroPrompt.trim() : '';
+  }
+  function tendHero() {
+    var p = heroPrompt();
+    if (!p || p === HERO.sig) return;
+    HERO.sig = p; HERO.state = 'gen'; HERO.url = ''; HERO.err = ''; HERO.showPrompt = false;
+    startHero(p);
+  }
+  function startHero(mine) {
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var killed = false;
+    var timer = setTimeout(function () { killed = true; if (ctl) ctl.abort(); }, 65000);
+    fetch(GEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: mine }),
+      signal: ctl ? ctl.signal : undefined
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (HERO.sig !== mine) return;                       // superseded by a newer prompt
+      clearTimeout(timer);
+      if (j && j.ok && j.url && /^https:/.test(j.url)) { HERO.state = 'ok'; HERO.url = j.url; }
+      else {
+        HERO.state = 'err';
+        HERO.err = 'ERROR: image generation failed — ' + (j && j.error ? j.error : 'no result from the endpoint') +
+          (j && j.detail ? ' :: ' + String(j.detail).slice(0, 200) : '');
+      }
+      render();
+    }).catch(function (e) {
+      if (HERO.sig !== mine) return;
+      clearTimeout(timer);
+      HERO.state = 'err';
+      HERO.err = killed ? 'ERROR: image generation timed out after 65 s'
+        : 'ERROR: image endpoint unreachable — ' + String(e).slice(0, 200);
+      render();
+    });
+  }
+
   function ov(id) { return OV[id] || (OV[id] = {}); }
 
   /* Merged view: the flow's playbook + locally added beats, in order. */
@@ -648,9 +729,11 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     h += '<div class="cmp-grid">';
     prods.forEach(function (pr) {
       var lead = pr.rank === 1;
+      var imgFile = skuImg(pr.sku);
       h += '<div class="prod' + (lead ? ' lead' : '') + '">' +
         '<div class="prod-tag">' + esc(pr.tag || (lead ? 'Best fit for you' : 'The alternative')) + '</div>' +
         '<div class="prod-bd">' +
+        (imgFile ? '<div class="prod-img"><img alt="' + esc(pr.name) + '" data-imgfall src="' + IMG_BASE + imgFile + '"></div>' : '') +
         '<div class="prod-nm"><span class="n">' + esc(pr.name) + '</span><span class="p">' + fmt$(pr.price) + '</span></div>' +
         (has(pr.headline) ? '<div class="prod-hl">' + esc(pr.headline) + '</div>' : '');
       if (pr.fit && pr.fit.length) {
@@ -670,7 +753,33 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       }
       h += '</div></div>';
     });
-    return h + '</div></div>';
+    return h + '</div>' + htmlHero(prods[0]) + '</div>';
+  }
+
+  /* The hero renders inside the comparison card, full width under the grid:
+     shimmer while the scene generates, then the image with an honest
+     "AI-generated visualization" caption + the LLM's own brief on demand,
+     or a visible error with the raw payload (never silent, never stock art). */
+  function htmlHero(lead) {
+    if (!heroPrompt() || !HERO.state) return '';
+    var name = lead && has(lead.name) ? lead.name : 'this pick';
+    var h = '<div class="hero">';
+    if (HERO.state === 'gen') {
+      h += '<div class="hero-shimmer">' + IC_SPARK +
+        '<span>AI Agent is sketching how the ' + esc(name) + ' fits ' + firstNameLabel() + '’s day…</span></div>';
+    } else if (HERO.state === 'ok') {
+      h += '<div class="hero-imgwrap"><img class="hero-img" alt="AI-generated visualization" src="' + esc(HERO.url) + '"></div>' +
+        '<div class="hero-cap"><span class="hc-l">' + IC_SPARK +
+        '<span>AI-generated visualization — drawn from what ' + firstNameLabel() + ' told us</span></span>' +
+        '<button type="button" class="hero-why" data-act="hero-prompt">' +
+        (HERO.showPrompt ? 'Hide the brief' : 'What the AI asked for') + '</button></div>' +
+        (HERO.showPrompt ? '<div class="hero-brief">“' + esc(heroPrompt()) + '”</div>' : '');
+    } else {
+      h += '<div class="hero-err"><div class="he-t">⚠ IMAGE GENERATION FAILED</div>' +
+        '<div class="he-d">' + esc(HERO.err) + '</div>' +
+        '<button type="button" class="hero-retry" data-act="hero-retry">Try again</button></div>';
+    }
+    return h + '</div>';
   }
 
   /* ======================================================================
@@ -950,7 +1059,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       S.asks.map(function (a) { return [a.askId, a.status, a.added, a.a && a.a.answer, a.a && a.a.tell]; }),
       S.cmds.map(function (c) { return [c.id, c.status]; }),
       S.added.map(function (b) { return b.id; }),
-      OV
+      OV,
+      [HERO.sig, HERO.state, HERO.url, HERO.err, HERO.showPrompt]
     ]);
   }
 
@@ -974,9 +1084,36 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     var keep = scroll.scrollTop;
     scroll.innerHTML = h;
     scroll.scrollTop = keep;
+    wireImgs();
     animateSentIn();
     tendThinkTimer();
     tendGreet();
+  }
+
+  /* Image listeners re-attach after every rebuild (no inline handlers in the
+     sandbox): missing static shots hide their strip; the hero fades in on load
+     and a dead generated URL surfaces as a visible error. */
+  function wireImgs() {
+    var imgs = scroll.querySelectorAll('img[data-imgfall]');
+    for (var i = 0; i < imgs.length; i++) {
+      (function (im) {
+        im.addEventListener('error', function () {
+          var w = im.closest ? im.closest('.prod-img') : null;
+          if (w) w.style.display = 'none';
+        });
+      })(imgs[i]);
+    }
+    var hi = scroll.querySelector('img.hero-img');
+    if (hi) {
+      hi.addEventListener('load', function () { hi.classList.add('in'); });
+      hi.addEventListener('error', function () {
+        if (HERO.state !== 'ok') return;
+        HERO.state = 'err';
+        HERO.err = 'ERROR: the generated image URL failed to load — ' + HERO.url;
+        render();
+      });
+      if (hi.complete && hi.naturalWidth > 0) hi.classList.add('in');
+    }
   }
 
   /* ======================================================================
@@ -1006,6 +1143,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     if (act === 'approve') { approve(id); return; }
     if (act === 'confirm-yes') { confirmBeat(id, true); return; }
     if (act === 'confirm-no') { confirmBeat(id, false); return; }
+    if (act === 'hero-prompt') { HERO.showPrompt = !HERO.showPrompt; render(); return; }
+    if (act === 'hero-retry') { HERO.sig = ''; tendHero(); return; }
     if (act === 'ask-send') { submitInput('ask'); return; }
     if (act === 'cmd-send') { submitInput('command'); return; }
     if (act === 'ask-add') { addAskAsStep(id); return; }
@@ -1326,6 +1465,7 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     if (p.profile && has(p.profile.nickname)) S.fname = p.profile.nickname.split(/\s+/)[0];
     else if (p.profile && has(p.profile.name)) S.fname = p.profile.name.split(/\s+/)[0];
     if (S.greet && p.recommendations && p.recommendations.length) dismissGreet();  // the panel is up → the greeting served its purpose
+    tendHero();   // composer sent (or re-sent) a heroPrompt → generate once per unique brief
     render();
   }
 
