@@ -165,6 +165,22 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
 .honest .ht{font-size:10.5px;font-style:italic;color:var(--ink-2);line-height:1.45;margin-top:3px}
 .prod-img{margin:0 0 8px;border-radius:8px;overflow:hidden;background:var(--page)}
 .prod-img img{display:block;width:100%;height:84px;object-fit:cover}
+.prod.prov{border-style:dashed}
+.prod.prov .prod-tag{background:var(--ai-bg);color:var(--ai-deep)}
+
+/* ---------- live brain-run stage strip (real pipeline boundaries, no fake spinners) ---------- */
+.stgcard{padding:9px 11px 8px}
+.stg-eyebrow{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ai-deep);display:flex;align-items:center;gap:5px;margin-bottom:6px}
+.stg-eyebrow svg{width:10px;height:10px}
+.stg{display:flex;align-items:center;gap:7px;font-size:11px;line-height:1.4;padding:2.5px 0}
+.stg.done{color:var(--ink-3)}
+.stg.cur{color:var(--ink);font-weight:600}
+.stg .sdot{flex:0 0 14px;width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.stg.done .sdot{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.stg.done .sdot svg{width:8px;height:8px}
+.stg.cur .sdot{border:2px solid var(--ai);border-top-color:transparent;animation:mer-spin .8s linear infinite}
+@keyframes mer-spin{to{transform:rotate(360deg)}}
 
 /* ---------- generative hero — the AI-drawn "your day with this laptop" scene ---------- */
 .hero{margin-top:10px;border:1px solid var(--ai-bd);border-radius:12px;overflow:hidden;background:var(--ai-bg2)}
@@ -495,7 +511,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     greet: '',        // suggested instant greeting (merGreet)
     asks: [],         // [{askId,q,status,a,added,err}]
     cmds: [],         // [{id,cmd,status,exec,err}] — command-bar jobs
-    added: []         // locally added talk beats (Add to steps)
+    added: [],        // locally added talk beats (Add to steps)
+    stages: []        // live brain-run stages from merStageStr [{n,total,label}]
   };
   var OV = {};        // per-beat overlay: {done,declined,heardHold,foldNow,confirmed,running,runIdx,exec,error,execSettled,copied,toldDone}
   var CP = {};        // copy-text registry, rebuilt every render (key → exact text)
@@ -719,19 +736,22 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   function htmlComparison() {
     var c = S.panel && S.panel.comparison;
     if (!c || !c.products || c.products.length < 2) return '';
+    /* provisional = the zero-LLM pre-panel duo (photos + prices, no ranking yet);
+       the composer's real ranked cards replace it in place */
+    var isProv = !!c.provisional;
     var needById = {};
     ((S.panel && S.panel.needs) || []).forEach(function (n) { needById[n.id] = n.label; });
     var prods = c.products.slice().sort(function (a, b) { return (a.rank || 9) - (b.rank || 9); });
     var h = '<div class="mcard' + newCard('cmp') + '"><div class="sec-hd">' +
       IC_SPARK.replace('<svg', '<svg style="color:#6B21C8"') +
-      '<span class="sec ai">The recommendation</span></div>';
+      '<span class="sec ai">' + (isProv ? 'Sizing up the options' : 'The recommendation') + '</span></div>';
     if (has(c.intro)) h += '<div class="cmp-intro">' + esc(c.intro) + '</div>';
     h += '<div class="cmp-grid">';
     prods.forEach(function (pr) {
-      var lead = pr.rank === 1;
+      var lead = pr.rank === 1 && !isProv;
       var imgFile = skuImg(pr.sku);
-      h += '<div class="prod' + (lead ? ' lead' : '') + '">' +
-        '<div class="prod-tag">' + esc(pr.tag || (lead ? 'Best fit for you' : 'The alternative')) + '</div>' +
+      h += '<div class="prod' + (lead ? ' lead' : '') + (isProv ? ' prov' : '') + '">' +
+        '<div class="prod-tag">' + esc(pr.tag || (isProv ? 'On the table' : (lead ? 'Best fit for you' : 'The alternative'))) + '</div>' +
         '<div class="prod-bd">' +
         (imgFile ? '<div class="prod-img"><img alt="' + esc(pr.name) + '" data-imgfall src="' + IMG_BASE + imgFile + '"></div>' : '') +
         '<div class="prod-nm"><span class="n">' + esc(pr.name) + '</span><span class="p">' + fmt$(pr.price) + '</span></div>' +
@@ -779,6 +799,23 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
         '<div class="he-d">' + esc(HERO.err) + '</div>' +
         '<button type="button" class="hero-retry" data-act="hero-retry">Try again</button></div>';
     }
+    return h + '</div>';
+  }
+
+  /* Live brain-run stages (merStageStr) — REAL pipeline boundaries pushed by the
+     flow (gate done → policy read → composing), never a fake spinner. Earlier
+     stages collapse to checkmarks; the latest one spins. Cleared the moment a
+     composed panel lands. */
+  function htmlStages() {
+    if (!S.stages.length) return '';
+    var h = '<div class="mcard stgcard' + newCard('stg') + '">' +
+      '<div class="stg-eyebrow">' + IC_SPARK + '<span>AI Agent is working</span></div>';
+    S.stages.forEach(function (st, i) {
+      var cur = i === S.stages.length - 1;
+      h += '<div class="stg' + (cur ? ' cur' : ' done') + '">' +
+        '<span class="sdot">' + (cur ? '' : IC_CHK) + '</span>' +
+        '<span class="slb">' + esc(st.label) + '</span></div>';
+    });
     return h + '</div>';
   }
 
@@ -1060,7 +1097,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       S.cmds.map(function (c) { return [c.id, c.status]; }),
       S.added.map(function (b) { return b.id; }),
       OV,
-      [HERO.sig, HERO.state, HERO.url, HERO.err, HERO.showPrompt]
+      [HERO.sig, HERO.state, HERO.url, HERO.err, HERO.showPrompt],
+      S.stages
     ]);
   }
 
@@ -1077,7 +1115,9 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       h += htmlContext();
       h += htmlNeeds();
       h += htmlComparison();
-      h += beats().length ? htmlPlaybook() : htmlThinking();
+      h += htmlStages();
+      /* the live stage strip replaces the generic thinking card while a run streams */
+      h += beats().length ? htmlPlaybook() : (S.stages.length ? '' : htmlThinking());
       h += htmlDraft();
       h += htmlAsks();
     }
@@ -1452,6 +1492,10 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
         p.recommendations = cur.recommendations;
       }
       if (!p.profile && cur.profile) p.profile = cur.profile;
+      /* the zero-LLM provisional duo must never overwrite real ranked cards */
+      if (p.comparison && p.comparison.provisional && cur.comparison && !cur.comparison.provisional) {
+        p.comparison = cur.comparison;
+      }
       if (!p.comparison && cur.comparison) p.comparison = cur.comparison;
       if ((!p.needs || !p.needs.length) && cur.needs && cur.needs.length) p.needs = cur.needs;
       if (!has(p.context) && has(cur.context)) p.context = cur.context;
@@ -1465,6 +1509,10 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     if (p.profile && has(p.profile.nickname)) S.fname = p.profile.nickname.split(/\s+/)[0];
     else if (p.profile && has(p.profile.name)) S.fname = p.profile.name.split(/\s+/)[0];
     if (S.greet && p.recommendations && p.recommendations.length) dismissGreet();  // the panel is up → the greeting served its purpose
+    if (p.recommendations && p.recommendations.length) {
+      S.stages = [];                                   // the run landed — the stage strip is done
+      if (_stageTimer) { clearTimeout(_stageTimer); _stageTimer = null; }
+    }
     tendHero();   // composer sent (or re-sent) a heroPrompt → generate once per unique brief
     render();
   }
@@ -1508,6 +1556,19 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     S.convo = c.transcript || [];
     if (c.customer && has(c.customer.nickname)) S.fname = String(c.customer.nickname).split(/\s+/)[0];
     checkHeard();
+  }
+
+  var _stageTimer = null;
+  function onStage(st) {
+    if (!st || typeof st !== 'object' || !has(st.label)) return;
+    var n = +st.n || (S.stages.length + 1);
+    /* stage 1 of a fresh run resets a stale strip from an abandoned run */
+    S.stages = S.stages.filter(function (s) { return +s.n < n; });
+    S.stages.push({ n: n, total: +st.total || 0, label: String(st.label) });
+    if (_stageTimer) clearTimeout(_stageTimer);
+    /* a run that never lands its panel must not imply progress forever */
+    _stageTimer = setTimeout(function () { S.stages = []; render(); }, 90000);
+    render();
   }
 
   function onAsk(a) {
@@ -1565,6 +1626,7 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       ing(src, 'merAskStr', function (v) { onAsk(jparse(v)); });
       ing(src, 'merSentStr', function (v) { onSent(jparse(v)); });
       ing(src, 'merConvoStr', function (v) { onConvo(jparse(v)); });
+      ing(src, 'merStageStr', function (v) { onStage(jparse(v)); });
       ing(src, 'merGreet', function (v) { onGreet(typeof v === 'string' ? v : String(v)); });
     });
   }

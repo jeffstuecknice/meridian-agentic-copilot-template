@@ -95,6 +95,7 @@ comparison in hand.
   | `merExecStr` | `{recId, ok, narration, executed:[{action, ref, ok, summary, receiptUrl?, total?}]}` | after Approve or a command finishes |
   | `merAskStr` | `{askId, title, answer, tell, sources:[{id,title}], escalate, escalateNote}` | knowledge answers (ask postback + auto-question) |
   | `merSentStr` | `{pct, label, note}` | live sentiment, only on ≥5-pt/label change |
+  | `merStageStr` | `{n, total, label}` | REAL brain-run boundaries (gate done → policy read w/ actual section count → composing) — the tile's "AI Agent is working" strip; cleared when the composed panel lands |
   | `merConvoStr` | `{transcript:[{role,text}], customer:{customer_id,nickname}}` | every message turn |
   | `merGreet` | a suggested instant-greeting string | pre-panel turns only (before the first panel) |
 
@@ -112,6 +113,11 @@ comparison in hand.
 fit[] verdicts + an honest tradeoff], heroPrompt}, attempted, customerAsks, nextStepsIntro,
 recommendations:[beats with say/sayDone/detail/running/substeps/exec/policyQuote], draftMessage}` — the
 composer prompt in `package/build_meridian.py` is the authoritative field-by-field contract.
+- **`comparison.provisional` — the instant product duo.** The pre-panel (zero LLM, ~1 s after boot)
+  now carries both catalog laptops as unranked cards (`provisional:true`, "Option A/B" tags, dashed
+  borders, photos from the tile's static map) so the agent sees real product information the moment
+  the contact lands. The composer's ranked comparison replaces it in place; a provisional push can
+  never overwrite real ranked cards (tile merge guard).
 - **`comparison.heroPrompt` — the generative hero image.** "LLMs decide; code executes," applied to
   imagery: the composer AUTHORS a personalized image brief from the customer's stated needs (their
   café, their boarding pass, their editing app — no readable text, no logos, no faces); the tile hands

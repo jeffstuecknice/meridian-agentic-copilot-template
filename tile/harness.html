@@ -107,12 +107,28 @@
     var PRE_PANEL = {
       profile: PROFILE,
       context: 'Maya is choosing between the Aero 14 and Titan 16. A ProDock docking-station return was denied in-store last week — an open sore point.',
-      needs: [], comparison: null,
+      needs: [],
+      /* zero-LLM provisional duo — built by the flow from the catalog, photos are tile statics */
+      comparison: {
+        provisional: true,
+        intro: 'Both options are on the table — the AI Agent will rank them from what Maya says matters.',
+        products: [
+          { sku: 'NL-AERO14', name: 'Aero 14', price: 1299, rank: 1, tag: 'Option A', provisional: true },
+          { sku: 'NL-TITAN16', name: 'Titan 16', price: 1899, rank: 2, tag: 'Option B', provisional: true }
+        ]
+      },
       attempted: [{ t: 'Verified Summit membership (3 years)', k: 'ok' }],
       customerAsks: [],
       nextStepsIntro: 'The AI Agent is reasoning over Northlight policy and the catalog…',
       recommendations: []
     };
+
+    /* real pipeline boundaries, pushed by the flow as each brain step completes */
+    var STAGES = [
+      { n: 1, total: 3, label: 'Understood the request — pulling Northlight policy' },
+      { n: 2, total: 3, label: 'Reading Northlight policy — 6 relevant sections found' },
+      { n: 3, total: 3, label: 'Findings ready — composing the playbook' }
+    ];
 
     var EMPATHIZE_SAY = 'I hear you on the docking station, Maya — let me look at that return right now, because after three years with us that is not the experience we want for you.';
 
@@ -264,13 +280,22 @@
         run: function () { location.reload(); }
       },
       {
-        n: 2, label: 'Pre-panel (profile only, empty recommendations)',
-        note: 'Profile + context render; the playbook slot shows the cycling thinking card.',
+        n: 2, label: 'Pre-panel (profile + provisional product duo)',
+        note: 'Zero-LLM instant view: profile + context + BOTH laptops with photos, unranked ("Option A/B", dashed borders). The composer’s ranked cards replace it.',
         run: function () { push('merStateStr', PRE_PANEL); }
       },
       {
-        n: 3, label: 'Full panel — Turn 1 (needs + comparison + playbook)',
-        note: 'The showpiece: needs chips, ranked cards with honest tradeoffs, the MER-POL-02 return beat, offer-gated place_order (offer:true — Approve unlocks on Maya’s yes), send_receipt.',
+        n: 3, label: 'Stage stream — real pipeline boundaries (1→2→3)',
+        note: 'The “AI Agent is working” strip: understood ✓ → reading policy ✓ → composing ⟳. Cleared automatically when the full panel lands.',
+        run: function () {
+          push('merStageStr', STAGES[0]);
+          setTimeout(function () { push('merStageStr', STAGES[1]); }, 1400);
+          setTimeout(function () { push('merStageStr', STAGES[2]); }, 2800);
+        }
+      },
+      {
+        n: 4, label: 'Full panel — Turn 1 (needs + comparison + playbook)',
+        note: 'The showpiece: needs chips, ranked cards with honest tradeoffs, the MER-POL-02 return beat, offer-gated place_order (offer:true — Approve unlocks on Maya’s yes), send_receipt. Also clears the stage strip.',
         run: function () { push('merStateStr', FULL_PANEL); }
       },
       {
@@ -362,6 +387,7 @@
     ];
 
     var btns = document.getElementById('btns');
+    SCENARIOS.forEach(function (sc, si) { sc.n = si + 1; });  // display order is the number — no manual renumbering
     SCENARIOS.forEach(function (sc) {
       var b = document.createElement('button');
       b.innerHTML = '<b>' + sc.n + '</b>' + sc.label;

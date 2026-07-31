@@ -98,6 +98,7 @@ GATE = NID('0173'); GATE_PN = NID('0174'); SENT_S = NID('0175')
 ROUTE_SW = NID('0176'); RT_SKIP = NID('0177'); RT_Q = NID('0178'); RT_DEF = NID('0179')
 POL_SW = NID('0180'); PL_RUN = NID('0181'); PL_DEF = NID('0182')
 POLQ = NID('0183'); POL_KS = NID('0184'); POL_EXC = NID('0185'); POL_LLM = NID('0186'); POL_PARSE = NID('0187')
+STG1_S = NID('01b1'); STG2_P = NID('01b2'); STG2_S = NID('01b3'); STG3_S = NID('01b4')
 CMP_P = NID('0190'); CMP = NID('0191'); MERGE = NID('0192'); PUSH_SW = NID('0193')
 PS_PUSH = NID('0194'); PS_DEF = NID('0195'); PUSH = NID('0196')
 CMP2 = NID('0197'); MERGE2 = NID('0198'); PUSH_SW2 = NID('0199')
@@ -256,6 +257,7 @@ PROD_POST = (
     "if(typeof r==='string'){try{r=JSON.parse(r);}catch(e){}}\n"
     "var prods=(r&&r.products)||[];\n"
     "api.addToContext('merProdStr',prods.length?JSON.stringify(prods,null,1):'(catalog unavailable)','simple');\n"
+    "api.addToContext('merProds',prods,'simple');\n"
     + ("api.log('[MER][PROD<] '+prods.length+' products','info');\n" if DEBUG else ""))
 
 # Keyed on merPanelN===0 (not just an empty merPanelEsc) so a composer double-failure
@@ -265,10 +267,18 @@ PRE_PANEL_CODE = (
     "if(!context.merPanelEsc && (context.merPanelN||0)===0 && context.merCrm){\n"
     "  var rec=null;try{var _rj=JSON.parse(context.merCrmStr||'');if(_rj&&typeof _rj==='object')rec=_rj;}catch(e){}\n"
     "  if(!rec)rec=context.merCrm||{};\n"
+    # zero-LLM provisional comparison: both catalog laptops render instantly (photos are
+    # tile-side statics keyed on sku); the composer's real ranked cards replace it.
+    "  var prods=context.merProds||[];var cmpPre=null;\n"
+    "  var nm=String(rec.nickname||rec.name||'the customer').split(/\\s+/)[0];\n"
+    "  if(prods.length>=2){cmpPre={provisional:true,\n"
+    "    intro:'Both options are on the table \\u2014 the AI Agent will rank them from what '+nm+' says matters.',\n"
+    "    products:prods.slice(0,2).map(function(p,i){return {sku:p.sku,name:p.name,price:p.price,rank:i+1,\n"
+    "      tag:i===0?'Option A':'Option B',provisional:true};})};}\n"
     "  var pre={profile:buildProfile(rec,context.merNick||''),\n"
     "    context:String(rec.escalation||''),\n"
     "    attempted:(rec.aiResolved||[]).map(function(t){return {t:t,k:'ok'};}),\n"
-    "    needs:[],comparison:null,customerAsks:[],\n"
+    "    needs:[],comparison:cmpPre,customerAsks:[],\n"
     "    nextStepsIntro:'The AI Agent is reasoning over Northlight policy and the catalog\\u2026',recommendations:[]};\n"
     "  var es=JSON.stringify(pre).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
     "  api.addToContext('merPanelEsc',es,'simple');\n"
@@ -321,7 +331,26 @@ GATE_PARSE = (
     + "  }\n"
     "}\n"
     "api.addToContext('merSentEsc',sesc,'simple');\n"
+    # real-stage stream: a 'go' decision starts a 10-15s brain run — tell the tile
+    # what is actually happening at each boundary (never a fake spinner).
+    "var st1='';\n"
+    "if(decision==='go'){st1=JSON.stringify({n:1,total:3,label:'Understood the request \\u2014 pulling Northlight policy'})"
+    ".replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');}\n"
+    "api.addToContext('merStg1Esc',st1,'simple');\n"
     + ("api.log('[MER][GATE] msg='+String(context.merGateMsg||'').slice(0,60)+' -> '+route+' -> '+decision,'info');\n" if DEBUG else ""))
+
+# stage 2 — the knowledge search just returned: name the REAL number of policy sections read
+STAGE2_CODE = (
+    "var hits=context.merPolHits;var nHits=0;\n"
+    "try{var hv=(hits&&typeof hits==='object')?hits:JSON.parse(hits||'null');\n"
+    "  if(hv){if(Array.isArray(hv))nHits=hv.length;else if(Array.isArray(hv.topK))nHits=hv.topK.length;\n"
+    "    else if(Array.isArray(hv.results))nHits=hv.results.length;}\n"
+    "}catch(e){}\n"
+    "var lbl=nHits>0?('Reading Northlight policy \\u2014 '+nHits+' relevant sections found')"
+    ":'Reading Northlight policy';\n"
+    "var st2=JSON.stringify({n:2,total:3,label:lbl}).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
+    "api.addToContext('merStg2Esc',st2,'simple');\n"
+    + ("api.log('[MER][STAGE] 2/3 policy read ('+nHits+' hits)','info');\n" if DEBUG else ""))
 
 POLICY_QUERY = (
     "var rec=null;try{var _rj=JSON.parse(context.merCrmStr||'');if(_rj&&typeof _rj==='object')rec=_rj;}catch(e){}\n"
@@ -389,7 +418,11 @@ POLICY_PARSE = (
 
 COMPOSER_PREP = (
     "var slim=context.merPanelSlim||[];\n"
-    "api.addToContext('merPlaybookLine',(slim.length?('CURRENT PLAYBOOK \\u2014 these beats ALREADY EXIST on the panel. For any beat representing the same step, reuse the EXACT id and EXACT label verbatim; NEVER output a new beat that duplicates one of these under different wording: '+JSON.stringify(slim)):''),'simple');\n")
+    "api.addToContext('merPlaybookLine',(slim.length?('CURRENT PLAYBOOK \\u2014 these beats ALREADY EXIST on the panel. For any beat representing the same step, reuse the EXACT id and EXACT label verbatim; NEVER output a new beat that duplicates one of these under different wording: '+JSON.stringify(slim)):''),'simple');\n"
+    # stage 3 — findings are in hand, the composer LLM starts writing the panel
+    "var st3=JSON.stringify({n:3,total:3,label:'Findings ready \\u2014 composing the playbook'})"
+    ".replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
+    "api.addToContext('merStg3Esc',st3,'simple');\n")
 
 COMPOSER_PROMPT = (
     "You are the Northlight Agentic Copilot assisting a LIVE Care specialist named Riley (you never speak to the customer; you drive a side panel). "
@@ -965,6 +998,13 @@ def build():
     N.append((GATE_PN, code_node(GATE_PN, 'GATE - parse + sentiment', GATE_PARSE)))
     N.append((SENT_S, node(SENT_S, 'sendData', 'Push live sentiment',
                            {'tileId': TILE_ID, 'json': '{"merSentStr":"{{context.merSentEsc}}"}'})))
+    N.append((STG1_S, node(STG1_S, 'sendData', 'Stage 1/3 - understood',
+                           {'tileId': TILE_ID, 'json': '{"merStageStr":"{{context.merStg1Esc}}"}'})))
+    N.append((STG2_P, code_node(STG2_P, 'Stage 2/3 - policy read', STAGE2_CODE)))
+    N.append((STG2_S, node(STG2_S, 'sendData', 'Stage 2/3 - push',
+                           {'tileId': TILE_ID, 'json': '{"merStageStr":"{{context.merStg2Esc}}"}'})))
+    N.append((STG3_S, node(STG3_S, 'sendData', 'Stage 3/3 - composing',
+                           {'tileId': TILE_ID, 'json': '{"merStageStr":"{{context.merStg3Esc}}"}'})))
     N.append((ROUTE_SW, node(ROUTE_SW, 'switch', 'Route decision',
         {'switch': {'type': 'cognigyScript', 'operator': "context.merRoute||'go'"},
          'intentLevel': 'input.intent', 'useStrict': ''})))
@@ -1057,16 +1097,18 @@ def build():
         rel(PRE_P, PRE_S), rel(PRE_S, RECOMP_SW),
         rel(RECOMP_SW, None, children=[RC_STOP, RC_DEF]),
         rel(RC_STOP, None),
-        rel(RC_DEF, GATE), rel(GATE, GATE_PN), rel(GATE_PN, SENT_S), rel(SENT_S, ROUTE_SW),
+        rel(RC_DEF, GATE), rel(GATE, GATE_PN), rel(GATE_PN, SENT_S), rel(SENT_S, STG1_S),
+        rel(STG1_S, ROUTE_SW),
         rel(ROUTE_SW, None, children=[RT_SKIP, RT_Q, RT_DEF]),
         rel(RT_SKIP, None),
         rel(RT_Q, Q_PREP),
         rel(RT_DEF, POL_SW),
         rel(POL_SW, None, children=[PL_RUN, PL_DEF]),
-        rel(PL_RUN, POLQ), rel(POLQ, POL_KS), rel(POL_KS, POL_EXC), rel(POL_EXC, POL_LLM),
+        rel(PL_RUN, POLQ), rel(POLQ, POL_KS), rel(POL_KS, POL_EXC), rel(POL_EXC, STG2_P),
+        rel(STG2_P, STG2_S), rel(STG2_S, POL_LLM),
         rel(POL_LLM, POL_PARSE), rel(POL_PARSE, CMP_P),
         rel(PL_DEF, CMP_P),
-        rel(CMP_P, CMP), rel(CMP, MERGE), rel(MERGE, PUSH_SW),
+        rel(CMP_P, STG3_S), rel(STG3_S, CMP), rel(CMP, MERGE), rel(MERGE, PUSH_SW),
         rel(PUSH_SW, None, children=[PS_PUSH, PS_DEF]),
         rel(PS_PUSH, PUSH), rel(PUSH, None),
         rel(PS_DEF, CMP2), rel(CMP2, MERGE2), rel(MERGE2, PUSH_SW2),
@@ -1161,7 +1203,7 @@ def build():
     print('  Do NOT open/save the Command Agent node in the UI (save-validation gotcha).')
     print('  After import: upload knowledge/upload/*.txt into the Meridian_Knowledge store; wait for "ready".')
     print('  Then: create an Agent-Assist endpoint bound to flow Meridian_Copilot.')
-    print('Live Logging tags: [MER][CONVO] [MER][GREET] [MER][CRM>/<] [MER][PROD<] [MER][PRE] [MER][GATE] '
+    print('Live Logging tags: [MER][CONVO] [MER][GREET] [MER][CRM>/<] [MER][PROD<] [MER][PRE] [MER][STAGE] [MER][GATE] '
           '[MER][SENT] [MER][POLICY>/<] [MER][PANEL] [MER][MERGE] [MER][ASK>/<] [MER][EXEC>/<] [MER][CMD>/<]')
 
 
