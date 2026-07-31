@@ -222,6 +222,9 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
 .hero-draw svg{width:13px;height:13px;flex:0 0 13px}
 .hero-draw:hover{filter:brightness(1.06)}
 .beat.bstag{animation:cardIn .35s ease-out both}
+.beat-cmp{margin-top:10px}
+.beat-cmp.in{animation:cardIn .55s ease-out both}
+.beat-cmp .cmp-intro{margin-top:2px}
 .hero-img.in{opacity:1;transform:none}
 .hero-cap{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 11px;
   font-size:10.5px;color:var(--ai-deep)}
@@ -802,34 +805,52 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     return h + '</div></div>';
   }
 
-  function htmlComparison() {
+  /* The comparison lives INSIDE the Walk-the-comparison guided step once the agent
+     reaches it. Before that: a standalone TEASER (photos + prices, no ranking — the
+     reveal belongs to the step). Fallback: a panel with no walk beat renders the
+     full standalone card so the comparison can never be lost. */
+  function isWalkBeat(b) {
+    if (!b) return false;
+    var s = (String(b.id || '') + ' ' + String(b.label || '')).toLowerCase();
+    return s.indexOf('walk') >= 0 && s.indexOf('compar') >= 0;
+  }
+  function walkState() {
+    var list = beats(), wb = null, idx = -1;
+    for (var i = 0; i < list.length; i++) { if (isWalkBeat(list[i])) { wb = list[i]; idx = i; break; } }
+    if (!wb) return 'none';
+    var o = OV[wb.id] || {};
+    if (done(wb) || o.heardHold || o.foldNow) return 'done';
+    return idx === firstActive(list) ? 'active' : 'pending';
+  }
+  function hasCmp() {
     var c = S.panel && S.panel.comparison;
-    if (!c || !c.products || c.products.length < 2) return '';
-    /* provisional = the zero-LLM pre-panel duo (photos + prices, no ranking yet);
-       the composer's real ranked cards replace it in place */
-    var isProv = !!c.provisional;
+    return !!(c && c.products && c.products.length >= 2);
+  }
+  function cmpLead(c) {
+    return c.products.slice().sort(function (a, b) { return (a.rank || 9) - (b.rank || 9); })[0];
+  }
+
+  /* the card grid — teaser mode hides ranking, verdicts and tradeoffs (Option A/B only) */
+  function cmpCards(c, teaser) {
+    var isProv = !!c.provisional || !!teaser;
     var needById = {};
     ((S.panel && S.panel.needs) || []).forEach(function (n) { needById[n.id] = n.label; });
     var prods = c.products.slice().sort(function (a, b) { return (a.rank || 9) - (b.rank || 9); });
-    var h = '<div class="mcard' + newCard('cmp') + '"><div class="sec-hd">' +
-      IC_SPARK.replace('<svg', '<svg style="color:#6B21C8"') +
-      '<span class="sec ai">' + (isProv ? 'Sizing up the options' : 'The recommendation') + '</span></div>';
-    if (has(c.intro)) h += '<div class="cmp-intro">' + esc(c.intro) + '</div>';
-    h += '<div class="cmp-grid">';
-    prods.forEach(function (pr) {
+    var h = '<div class="cmp-grid">';
+    prods.forEach(function (pr, pi) {
       var lead = pr.rank === 1 && !isProv;
       /* catalog-driven image first (any scenario), sku-map fallback (the laptops);
          bare filenames resolve against IMG_BASE, https URLs pass through */
       var imgSrc = (typeof pr.img === 'string' && pr.img.trim()) ? pr.img.trim() : skuImg(pr.sku);
       if (imgSrc && !/^https:\/\//.test(imgSrc)) imgSrc = IMG_BASE + imgSrc.replace(/^\/+/, '');
       h += '<div class="prod' + (lead ? ' lead' : '') + (isProv ? ' prov' : '') + '">' +
-        '<div class="prod-tag">' + esc(pr.tag || (isProv ? 'On the table' : (lead ? 'Best fit for you' : 'The alternative'))) + '</div>' +
+        '<div class="prod-tag">' + esc(isProv ? ('Option ' + (pi ? 'B' : 'A')) : (pr.tag || (lead ? 'Best fit for you' : 'The alternative'))) + '</div>' +
         '<div class="prod-bd">' +
         (imgSrc ? '<div class="prod-img"><img alt="' + esc(pr.name) + '" data-imgfall data-zoom data-cap="' +
           esc(pr.name + ' — ' + fmt$(pr.price)) + '" src="' + esc(imgSrc) + '"></div>' : '') +
         '<div class="prod-nm"><span class="n">' + esc(pr.name) + '</span><span class="p">' + fmt$(pr.price) + '</span></div>' +
-        (has(pr.headline) ? '<div class="prod-hl">' + esc(pr.headline) + '</div>' : '');
-      if (pr.fit && pr.fit.length) {
+        (!isProv && has(pr.headline) ? '<div class="prod-hl">' + esc(pr.headline) + '</div>' : '');
+      if (!isProv && pr.fit && pr.fit.length) {
         h += '<div class="fits">';
         pr.fit.forEach(function (f) {
           var g = f.verdict === 'wins' ? '✓' : (f.verdict === 'close' ? '~' : '▾');
@@ -840,13 +861,28 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
         h += '</div>';
       }
       /* MER-POL-05: the comparison is never one-sided — the honest tradeoff always renders. */
-      if (has(pr.honest)) {
+      if (!isProv && has(pr.honest)) {
         h += '<div class="honest"><div class="honest-in"><div class="hl">The honest tradeoff</div>' +
           '<div class="ht">' + esc(pr.honest) + '</div></div></div>';
       }
       h += '</div></div>';
     });
-    return h + '</div>' + htmlHero(prods[0]) + '</div>';
+    return h + '</div>';
+  }
+
+  function htmlComparison() {
+    var c = S.panel && S.panel.comparison;
+    if (!c || !c.products || c.products.length < 2) return '';
+    var ws = walkState();
+    if (ws === 'active' || ws === 'done') return '';   // the Walk step hosts it now
+    var teaser = (ws === 'pending') || !!c.provisional;
+    var h = '<div class="mcard' + newCard('cmp') + '"><div class="sec-hd">' +
+      IC_SPARK.replace('<svg', '<svg style="color:#6B21C8"') +
+      '<span class="sec ai">' + (teaser ? 'Sizing up the options' : 'The recommendation') + '</span></div>';
+    if (has(c.intro)) h += '<div class="cmp-intro">' + esc(c.intro) + '</div>';
+    h += cmpCards(c, teaser);
+    if (!teaser) h += htmlHero(cmpLead(c));
+    return h + '</div>';
   }
 
   /* The hero renders inside the comparison card, full width under the grid:
@@ -937,7 +973,7 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
           : (i === act ? 'active' : 'pending');
     var cls = 'beat ' + state + (o.error ? ' failed' : '') + (o.foldNow ? ' folding' : '') + (fresh ? ' bstag' : '');
     var fn = firstName();
-    var h = '<div class="' + cls + '"' + (fresh ? ' style="animation-delay:' + (stagBase + 250 + Math.min(i * 150, 1200)) + 'ms"' : '') +
+    var h = '<div class="' + cls + '"' + (fresh ? ' style="animation-delay:' + (stagBase + 250 + Math.min(i * 260, 1560)) + 'ms"' : '') +
       ' data-beat="' + esc(b.id) + '">';
 
     /* header row */
@@ -952,7 +988,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     /* queued talk beats stay slim; done beats collapse unless mid-fold or carrying results */
     if (state === 'pending' && !isAct) return h + '</div>';
     var keepOpen = o.heardHold || o.foldNow ||
-      (isAct && o.exec && o.exec.executed && o.exec.executed.length);
+      (isAct && o.exec && o.exec.executed && o.exec.executed.length) ||
+      (isWalkBeat(b) && hasCmp());   // the walk step hosts the comparison — never collapses
     if (state === 'done' && !keepOpen) return h + '</div>';
     if (isDecl) {
       h += '<div class="declined-note">' + esc(fn) + ' declined — no action taken.</div>';
@@ -1022,6 +1059,16 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
           h += '<div class="noexec">No executable plan attached — nothing for the AI Agent to run.</div>';
         }
       }
+    }
+
+    /* THE REVEAL: the Walk-the-comparison step carries the ranked cards + the
+       draw-it hero — they appear exactly when the agent reaches this step. */
+    if (isWalkBeat(b) && hasCmp() && (state === 'active' || isDone || o.heardHold || o.foldNow)) {
+      var cw = S.panel.comparison;
+      var freshCmp = !SEEN['cmpe']; SEEN['cmpe'] = 1;
+      h += '<div class="beat-cmp' + (freshCmp ? ' in' : '') + '">' +
+        (has(cw.intro) ? '<div class="cmp-intro">' + esc(cw.intro) + '</div>' : '') +
+        cmpCards(cw, false) + htmlHero(cmpLead(cw)) + '</div>';
     }
     return h + '</div>';
   }
@@ -1208,10 +1255,11 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       h += htmlProfile();
       h += htmlContext();
       h += htmlNeeds();
-      h += htmlComparison();
       h += htmlStages();
       /* the live stage strip replaces the generic thinking card while a run streams */
       h += beats().length ? htmlPlaybook() : (S.stages.length ? '' : htmlThinking());
+      /* teaser/fallback only — disappears once the Walk step hosts the comparison */
+      h += htmlComparison();
       h += htmlDraft();
       h += htmlAsks();
     }
@@ -1417,9 +1465,17 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
      Confirm-gated beats instead listen for the CUSTOMER's yes/no.
      ====================================================================== */
   function scheduleFold(id) {
-    /* HEARD MOMENT: banner holds ~2.1s, then the slow (1.15s) visible fold. */
+    /* HEARD MOMENT: banner holds ~2.1s, then the slow (1.15s) visible fold.
+       Exception: the walk step hosts the comparison — its banner clears but the
+       step stays open (folding away the product cards would undo the reveal). */
     setTimeout(function () {
       var o = ov(id);
+      var b = findBeat(id);
+      if (b && isWalkBeat(b) && hasCmp()) {
+        o.heardHold = false;
+        render(true);
+        return;
+      }
       o.heardHold = false; o.foldNow = true;
       render(true);
       setTimeout(function () { delete o.foldNow; render(true); }, 1250);
