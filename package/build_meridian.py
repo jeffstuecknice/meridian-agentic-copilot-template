@@ -229,6 +229,11 @@ CRM_PREP = (
     # on the very first turn; a name spoken in chat later still wins (name-first lookup).
     "if(!cid && !chatName){cid='" + DEMO_DEFAULT_CID + "';"
     + ("api.log('[MER][CRM>] no identify signal yet - using demo default '+cid,'info');" if DEBUG else "") + "}\n"
+    # a platform-injected customer_id the CRM doesn't know (e.g. copilot-customer-context from
+    # another demo's wiring) must not 404-loop: after one failed try, fall to the demo default.
+    "if(cid && !chatName && context.merCrmBad===cid){cid='" + DEMO_DEFAULT_CID + "';"
+    + ("api.log('[MER][CRM>] id '+context.merCrmBad+' unknown to CRM - using demo default '+cid,'info');" if DEBUG else "") + "}\n"
+    "api.addToContext('merCrmTried',cid,'simple');\n"
     "function q(v){return encodeURIComponent(v==null?'':String(v));}\n"
     "var url='" + MOCK_API + "?action=get_customer&customer_id='+q(cid)+'&name='+q(chatName);\n"
     "var crmSkip=(!!context.merCrm && url===context.merCrmUrl)?'skip':'go';\n"
@@ -253,10 +258,18 @@ CRM_POST = (
     "var r=(raw&&typeof raw.result==='object'&&raw.result)?raw.result:((raw&&typeof raw.body==='object'&&raw.body)?raw.body:raw);\n"
     "if(typeof r==='string'){try{r=JSON.parse(r);}catch(e){}}\n"
     "var rec=(r&&r.customer)||null;\n"
-    "api.addToContext('merCrm',rec,'simple');\n"
-    "api.addToContext('merBrand',(rec&&rec.brand)||'Northlight Electronics','simple');\n"
+    # KEEP-LAST-GOOD: a failed lookup (unknown injected id, transient 404) must never wipe a
+    # working record — live-diagnosed 2026-07-31: cust_001 from copilot-customer-context nulled
+    # merCrm and the recompute guard then stopped EVERY turn (steps never composed again).
+    "if(!rec){api.addToContext('merCrmBad',context.merCrmTried||'','simple');}\n"
+    "if(!rec && context.merCrm){\n"
+    "  api.log('[MER][CRM<] lookup failed for '+(context.merCrmTried||'?')+' \\u2014 keeping cached '+String((context.merCrm&&context.merCrm.name)||'record'),'error');\n"
+    "}else{\n"
+    "  api.addToContext('merCrm',rec,'simple');\n"
+    "  api.addToContext('merBrand',(rec&&rec.brand)||'Northlight Electronics','simple');\n"
     # masking-proof: context OBJECT values get PII-masked; the JSON STRING survives intact.
-    "api.addToContext('merCrmStr',rec?JSON.stringify(rec,null,2):'(no customer identified yet)','simple');\n"
+    "  api.addToContext('merCrmStr',rec?JSON.stringify(rec,null,2):'(no customer identified yet)','simple');\n"
+    "}\n"
     + ("api.log('[MER][CRM<] '+(rec?(rec.name+' ('+rec.tier+')'):'NO RECORD'),'info');\n" if DEBUG else ""))
 
 PROD_PREP = (

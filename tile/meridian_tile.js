@@ -871,17 +871,18 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   }
 
   function htmlComparison() {
+    /* The comparison belongs to the Walk-the-comparison step and NEVER appears
+       before the guided steps exist. This standalone card is only the safety
+       net for a composed panel that somehow lacks a walk beat. */
     var c = S.panel && S.panel.comparison;
     if (!c || !c.products || c.products.length < 2) return '';
-    var ws = walkState();
-    if (ws === 'active' || ws === 'done') return '';   // the Walk step hosts it now
-    var teaser = (ws === 'pending') || !!c.provisional;
+    if (!beats().length) return '';          // no guided steps yet → no comparison anywhere
+    if (walkState() !== 'none') return '';   // a walk beat exists → the step hosts it
     var h = '<div class="mcard' + newCard('cmp') + '"><div class="sec-hd">' +
       IC_SPARK.replace('<svg', '<svg style="color:#6B21C8"') +
-      '<span class="sec ai">' + (teaser ? 'Sizing up the options' : 'The recommendation') + '</span></div>';
+      '<span class="sec ai">The recommendation</span></div>';
     if (has(c.intro)) h += '<div class="cmp-intro">' + esc(c.intro) + '</div>';
-    h += cmpCards(c, teaser);
-    if (!teaser) h += htmlHero(cmpLead(c));
+    h += cmpCards(c, false) + htmlHero(cmpLead(c));
     return h + '</div>';
   }
 
@@ -1778,13 +1779,10 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   }
 
   function onGreet(g) {
-    g = String(g == null ? '' : g);
-    /* strip ONE stray escape level if the live channel delivered it escaped */
-    if (/\\["\\]/.test(g)) g = g.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-    if (!has(g)) return;
-    if (S.panel && S.panel.recommendations && S.panel.recommendations.length) return;  // panel already up
-    S.greet = g;
-    tendGreet();
+    /* RETIRED (2026-07-31): the greeting is the Greet guided step — a separate
+       floating toast was redundant and covered the profile card. The flow may
+       still send merGreet; it is deliberately ignored. */
+    return;
   }
   function tendGreet() {
     if (!S.greet) { if (greetEl) { greetEl.remove(); greetEl = null; } return; }
