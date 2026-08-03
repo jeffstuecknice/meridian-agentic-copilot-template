@@ -60,10 +60,24 @@ mounting followed the creation path). Delete such a profile; do not try to save 
 ## Step 3 — the routing chain
 
 1. **Digital skill** for the demo.
-2. **Studio script** — clone a KNOWN-WORKING agent-assist script if you have one (see the bisect
-   rule below). Minimum shape: `Begin → ReqAgent(skill)`; `OnAssignment → Snippet
+2. **Studio script** — clone `MeridianAgenticCopilot_StudioScript_1` (bundled at the repo root)
+   rather than authoring from a blank canvas — see the bisect rule below for why a proven script
+   beats a fresh one. Minimum shape: `Begin → ReqAgent(skill)`; `OnAssignment → Snippet
    (ASSIGN global:__AgentId = "{AGENTID}") → Agent Assist action (assistLaunchConfigName =
    the profile name)`.
+
+   > **Credentials in the bundled script.** The "Map + Publish Context" Snippet calls the
+   > Interaction Context API and needs a CXone API access key. The bundled file has the real key
+   > stripped out — `accessKeyId` and `accessKeySecret` are placeholders
+   > (`YOUR_CXONE_ACCESS_KEY_ID` / `YOUR_CXONE_ACCESS_KEY_SECRET`). Before you can use this snippet:
+   >   - **Generate your own access key** — CXone Admin → Security → API Access (Access Key
+   >     Management) → create a new key scoped to this integration, then paste the id/secret into
+   >     those two `ASSIGN` lines in your cloned script.
+   >   - **More secure, if you know how**: wire the request through **Connections Hub** instead of
+   >     hardcoding the key inline in the script — ask your tenant admin if that's set up for this
+   >     use case.
+   > Never commit a real access key back into this repo — this file is meant to ship with
+   > placeholders only.
 3. **Chat channel** → default skill = the skill, script = the script.
 4. **Guide entry point** → the chat channel.
 5. **Full agent logout/login** after ANY profile or script change. Test on the **first contact

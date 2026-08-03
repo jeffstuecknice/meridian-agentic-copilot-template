@@ -41,6 +41,7 @@ Full script with characters, transcript, and what-to-look-for: [docs/SCENARIO.md
 | `api/` | PHP mock backend: CRM, product catalog, order/return/credit actions, xApp SMS |
 | `knowledge/` | Policy documents — `.md` source, `.txt` upload copies (Knowledge Store rejects `.md`) |
 | `tools/` | Deploy scripts, profile-hub API scripts, test utilities |
+| `MeridianAgenticCopilot_StudioScript_1.json` | Known-working CXone Studio script — clone and re-point it (Phase 5 of CXONE_SETUP) instead of authoring from a blank canvas. API key stripped to a placeholder; see the credentials note in CXONE_SETUP.md. |
 
 ## Architecture in one paragraph
 
