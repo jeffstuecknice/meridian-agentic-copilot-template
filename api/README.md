@@ -5,8 +5,10 @@ actions live here; policy lives in the Knowledge Store** — the AI reasons from
 this API. Every executed action returns a real generated reference (`RMA-…`, `CR-…`, `ORD-…`); the
 LLM never invents one, and a missing result renders as a visible ERROR, never fake data.
 
-Live base: `https://aicoe.3ddesignview.com/demo/cognigy_copilot/mock_api_meridian/meridian_api.php`
-Deploy: `python tools/deploy_api.py` (FTP creds file outside the repo — see the script header).
+Deployable as-is to any PHP/FTP host — nobody's URL is baked in here. Deploy with
+`python tools/deploy_api.py` (FTP creds file outside the repo — see the script header; the script
+prints the base URL to use once it's live). Point `package/build_meridian.py` at that URL via the
+`MERIDIAN_API_BASE` env var when you build the Cognigy package.
 
 ## Convention
 

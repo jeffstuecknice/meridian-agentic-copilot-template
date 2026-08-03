@@ -12,6 +12,20 @@ confirmation references.
 > **North star:** Listen → Reason → Propose → Approve → Execute — with the human agent in control at the
 > approval gate, and the AI doing the reading, reasoning, and doing.
 
+## Try it
+
+Two ready-to-import packages ship in `package/` — no build step required:
+
+- **`Package-Meridian-HelloCopilot.zip`** — a 6-node diagnostic flow (grid → inline tile → echo →
+  postback), zero external dependencies. Import this first: it proves your CXone-to-Cognigy wiring
+  end to end (see `docs/CXONE_SETUP.md`) before any real logic is involved.
+- **`Package-Meridian-Copilot.zip`** (`-noKS.zip` for re-imports once the Knowledge Store already has
+  documents) — the real flow, AI agents, and prompts. Import it to **study** the actual working
+  build immediately. To **test** it end to end with live data, deploy `api/` to your own host
+  (`python tools/deploy_api.py`, own Gemini key for hero images) and rebuild with
+  `MERIDIAN_API_BASE=<your-url> python package/build_meridian.py` — the shipped zip points at a
+  placeholder host on purpose, so nobody's clone silently calls somebody else's server.
+
 ## The seven demo beats
 
 1. **Accept + pre-load** — agent accepts the contact; the tile boots with a skeleton, "AI Agent is reviewing

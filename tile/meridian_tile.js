@@ -562,8 +562,24 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
      (LLMs decide); the tile hands it to the image endpoint and displays the result
      (code executes). Sig-guarded on the prompt string so rehydrates never regenerate;
      the endpoint caches by prompt hash so even a tile reload costs nothing. */
-  var GEN_URL = 'https://aicoe.3ddesignview.com/demo/cognigy_copilot/mock_api_meridian/meridian_image.php';
-  var IMG_BASE = 'https://aicoe.3ddesignview.com/demo/cognigy_copilot/mock_api_meridian/img/';
+  /* Backend base is DERIVED from wherever this script was served, never hardcoded —
+     so the tile always talks to its own host and the repo carries nobody's URL.
+     window.MERIDIAN_API_BASE overrides it (harness.html, or a split deployment). */
+  var API_BASE = (function () {
+    if (typeof window.MERIDIAN_API_BASE === 'string' && window.MERIDIAN_API_BASE) {
+      return window.MERIDIAN_API_BASE.replace(/\/+$/, '');
+    }
+    var s = document.currentScript;
+    if (!s) {                                   // currentScript is null in some embeds
+      var all = document.getElementsByTagName('script');
+      for (var i = all.length - 1; i >= 0; i--) {
+        if (all[i].src && /meridian_tile\.js/.test(all[i].src)) { s = all[i]; break; }
+      }
+    }
+    return (s && s.src) ? s.src.replace(/\/[^\/]*$/, '') : '';
+  })();
+  var GEN_URL = API_BASE ? API_BASE + '/meridian_image.php' : '';
+  var IMG_BASE = API_BASE ? API_BASE + '/img/' : '';
   /* keys are normalized (uppercase, alphanumeric only) so 'NL-AERO14', 'NL-AERO-14'
      and 'nl aero 14' all resolve — composer SKU spelling must never hide a photo */
   var SKU_IMG = { 'NLAERO14': 'aero14.png', 'NLTITAN16': 'titan16.png' };
@@ -610,6 +626,13 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     heroGo();
   }
   function startHero(mine) {
+    if (!GEN_URL) {                             // no backend configured — say so, never fake it
+      HERO.state = 'err';
+      HERO.err = 'ERROR: no image endpoint — this build has no backend host. Serve the tile from ' +
+        'your own deployment, or set window.MERIDIAN_API_BASE. See docs/API_CONTRACT.md.';
+      render();
+      return;
+    }
     var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var killed = false;
     var timer = setTimeout(function () { killed = true; if (ctl) ctl.abort(); }, 65000);
@@ -842,7 +865,11 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       /* catalog-driven image first (any scenario), sku-map fallback (the laptops);
          bare filenames resolve against IMG_BASE, https URLs pass through */
       var imgSrc = (typeof pr.img === 'string' && pr.img.trim()) ? pr.img.trim() : skuImg(pr.sku);
-      if (imgSrc && !/^https:\/\//.test(imgSrc)) imgSrc = IMG_BASE + imgSrc.replace(/^\/+/, '');
+      /* bare filenames need a host to resolve against; with no backend, render the card
+         without a photo rather than emitting a URL that can only 404 */
+      if (imgSrc && !/^https:\/\//.test(imgSrc)) {
+        imgSrc = IMG_BASE ? IMG_BASE + imgSrc.replace(/^\/+/, '') : '';
+      }
       h += '<div class="prod' + (lead ? ' lead' : '') + (isProv ? ' prov' : '') + '">' +
         '<div class="prod-tag">' + esc(isProv ? ('Option ' + (pi ? 'B' : 'A')) : (pr.tag || (lead ? 'Best fit for you' : 'The alternative'))) + '</div>' +
         '<div class="prod-bd">' +

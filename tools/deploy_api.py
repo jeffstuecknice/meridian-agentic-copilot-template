@@ -1,8 +1,9 @@
-"""deploy_api.py — upload the Meridian mock API (+ tile assets when present) to Hostinger.
+"""deploy_api.py — upload the Meridian mock API (+ tile assets when present) to any PHP/FTP host.
 
 Credentials are NEVER in the repo: key=value file at CREDS_FILE (host/user/password/remote_dir,
-optional port) — same file the other NICE demo deploys use. Remote folder mock_api_meridian/ is
-created as a sibling of the existing mock_api folders.
+optional port, optional web_host). Remote folder mock_api_meridian/ is created as a sibling of
+remote_dir. FTP host and public web host are often different (shared hosting FTP is frequently a
+bare IP) — set web_host explicitly in the creds file if so, or the final printed URL is a guess.
 """
 import ftplib
 import os
@@ -14,8 +15,9 @@ try:
 except Exception:
     pass
 
-CREDS_FILE = r'C:\Users\jstueck\Downloads\v246_work\mockapi_creds.txt'
-GEMINI_KEY_FILE = r'C:\Users\jstueck\Downloads\v246_work\gemini_key.txt'   # → gen_key.txt server-side, NEVER in repo
+# Override with MERIDIAN_DEPLOY_CREDS / MERIDIAN_GEMINI_KEY if these aren't your paths.
+CREDS_FILE = os.environ.get('MERIDIAN_DEPLOY_CREDS', r'C:\Users\jstueck\Downloads\v246_work\mockapi_creds.txt')
+GEMINI_KEY_FILE = os.environ.get('MERIDIAN_GEMINI_KEY', r'C:\Users\jstueck\Downloads\v246_work\gemini_key.txt')   # → gen_key.txt server-side, NEVER in repo
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # repo root
 
 FILES = [
@@ -138,9 +140,13 @@ def deploy(creds):
     ftp.quit()
     print('=' * 70)
     print('  uploaded: %d   skipped: %d   failed: %d' % (ok, skipped, failed))
-    web_path = creds['target_dir'].replace('/public_html/aicoe', '')
-    base_url = 'https://aicoe.3ddesignview.com' + web_path
-    print('  mock-API:  ' + base_url + 'meridian_api.php?action=ping')
+    if 'web_host' in creds:
+        base_url = 'https://' + creds['web_host'] + creds['target_dir']
+        print('  mock-API:  ' + base_url + 'meridian_api.php?action=ping')
+        print('  MERIDIAN_API_BASE=' + base_url.rstrip('/'))
+    else:
+        print('  no web_host set in the creds file — FTP host is often not the public domain')
+        print('  (e.g. a bare IP on shared hosting), so add web_host=<your-domain> to confirm the URL')
     print('=' * 70)
     if failed:
         sys.exit(1)

@@ -38,8 +38,29 @@ LOCALE_REF = '696d38ca-e3af-428b-a719-62a70fc418d9'
 EPOCH     = 1785400000
 DEBUG     = True
 
-MOCK_API  = 'https://aicoe.3ddesignview.com/demo/cognigy_copilot/mock_api_meridian/meridian_api.php'
-JS_URL    = 'https://aicoe.3ddesignview.com/demo/cognigy_copilot/mock_api_meridian'
+# ── your backend ────────────────────────────────────────────────────────────────
+# Meridian's flow calls a small JSON backend (CRM, catalog, execute actions) and loads
+# meridian_tile.js from that same host. There is deliberately NO default: this repo ships
+# nobody's server. Point it at your own deployment via the env var, e.g.
+#
+#     set MERIDIAN_API_BASE=https://example.com/meridian        (Windows)
+#     export MERIDIAN_API_BASE=https://example.com/meridian     (bash)
+#
+# It must serve meridian_api.php, meridian_image.php and img/ — see docs/API_CONTRACT.md
+# for the eight actions and their payload shapes. To prove your CXone/Cognigy wiring with
+# no backend at all, build tools/build_hello_copilot.py instead (inline tile, zero deps).
+API_BASE = (os.environ.get('MERIDIAN_API_BASE') or '').rstrip('/')
+if not API_BASE:
+    raise SystemExit(
+        'MERIDIAN_API_BASE is not set.\n'
+        '  Meridian needs a backend host (JSON API + the tile JS + catalog images).\n'
+        '  Set it to your own deployment:  MERIDIAN_API_BASE=https://your.host/meridian\n'
+        '  Contract: docs/API_CONTRACT.md\n'
+        '  No backend yet? Build tools/build_hello_copilot.py - it proves the whole\n'
+        '  CXone-to-Cognigy wiring chain with an inline tile and zero dependencies.')
+
+MOCK_API  = API_BASE + '/meridian_api.php'
+JS_URL    = API_BASE
 TILE_ID   = 'meridian-copilot-tile'
 DEMO_DEFAULT_CID = 'cust_101'
 

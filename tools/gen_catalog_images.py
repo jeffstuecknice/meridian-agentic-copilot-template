@@ -15,7 +15,11 @@ import ssl
 import sys
 import urllib.request
 
-BASE = 'https://aicoe.3ddesignview.com/demo/cognigy_copilot/mock_api_meridian/'
+BASE = os.environ.get('MERIDIAN_API_BASE', '').rstrip('/')
+if not BASE:
+    sys.exit('MERIDIAN_API_BASE is not set — point it at your own deployed api/ '
+             '(same value you pass to package/build_meridian.py).')
+BASE += '/'
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMG_DIR = os.path.join(HERE, 'api', 'img')
 FORCE = '--force' in sys.argv
