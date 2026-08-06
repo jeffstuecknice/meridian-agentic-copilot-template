@@ -47,7 +47,39 @@ start
 ```
 
 Control flow is **topological** — Cognigy `end` nodes do not halt a turn, and switch branches fall
-through to the switch's next sibling, so the branch order above is load-bearing (see TROUBLESHOOTING).
+through to the switch's next sibling, so the branch order above is load-bearing.
+
+### 2a. Identity resolution & provenance (probe-then-commit)
+
+Every turn, the flow decides WHO the panel is about, and the customer card **states where that
+answer came from** — a fallback record must never masquerade as a live CRM hit (the REAL-DATA-OR-
+ERROR rule in CLAUDE.md; the labeled `cust_101` demo default is that rule's one sanctioned
+exception, allowed precisely *because* the strip brands it red).
+
+Signals, strongest first: **id typed in chat** (`cust_NNN`, tester hook, any participant) →
+**name given in chat** (customer turns only, `this is / i am / i'm / my name is` anchored to the
+message start, lowercase accepted) → **published customer id** (`copilot-customer-context`, fed by
+the Studio script via the Interaction Context API) → **demo default** (red). The name/id captures
+are **latched** into masking-safe context strings so they survive the 20-turn transcript window.
+
+The regex is deliberately loose because **the CRM is the verifier, not the regex**:
+- a captured name is a **probe** — provenance only commits (`merCrmOk/UrlOk/SrcOk/LastId`) when
+  the lookup returns a record; a definitive miss (`ok:false`) blacklists the candidate
+  (capped at 8; a capitalized two-word miss retries its first word — "Maya I'll" → "Maya") and
+  the prior identity stands untouched; a transient failure changes NOTHING and retries next turn
+  (only success-committed URLs are skip-cached);
+- a **definitive** unknown published id latches `merCrmBad` and falls to the labeled default
+  (`unknown`, red, naming the bad id and which signal carried it); the latch clears if the id
+  later succeeds;
+- an **identity flip** (record's customer_id changed) wipes every per-customer artifact (beat
+  ledger, policy findings, published nickname — the superseded published id is dead to the
+  session via `merCidOverridden`), pushes the new profile instantly (PRE0 re-fires), and forces
+  the gate/recompute/policy path to re-run even on a "filler" turn;
+- a cold-start CRM failure renders an explicit red **NO RECORD** card — never an eternal spinner.
+
+Cognigy PII-masks **object/array values** in context (live-proven: `merTx` came back empty), so
+every cross-node object read has a JSON-string mirror that survives intact: `merTxJson`,
+`merCrmStr`, `merPanelSlimJson`, `merProdStr`, `merGateRoute`/`merGateQuery`, `merSentJson`.
 
 ### The two execution paths, on purpose
 
@@ -113,6 +145,13 @@ comparison in hand.
 fit[] verdicts + an honest tradeoff], heroPrompt}, attempted, customerAsks, nextStepsIntro,
 recommendations:[beats with say/sayDone/detail/running/substeps/exec/policyQuote], draftMessage}` — the
 composer prompt in `package/build_meridian.py` is the authoritative field-by-field contract.
+- **`profile.src` / `srcNote` / `srcDbg` — the provenance strip** (§2a). The tile renders a strip
+  ABOVE the customer's name: green (`.ok`) for the live sources `id`/`name`/`chatid`, red pulsing
+  (`.bad`) for `default`/`unknown`/`stale`/`error`. `srcNote` is the human sentence; `srcDbg` is
+  the raw identify-input line (`published=… chatName=… chatId=… turns=N (json) ignored=…`) — the
+  panel's own diagnostic, because Cognigy Live Logging does not surface `api.log()` from code
+  nodes on this stack. The deterministic `buildProfile` overwrites the LLM's profile with these
+  fields on every push; a panel push that omits `profile` keeps the previous card (tile merge).
 - **`comparison.provisional` — the instant product duo.** The pre-panel (zero LLM, ~1 s after boot)
   now carries both catalog laptops as unranked cards (`provisional:true`, "Option A/B" tags, dashed
   borders, photos from the tile's static map) so the agent sees real product information the moment

@@ -39,8 +39,10 @@ Two ready-to-import packages ship in `package/` — no build step required:
 5. **Reason (policy exception)** — the return is outside the standard window; the AI finds the loyalty-tier
    exception clause in the Knowledge Store (verbatim quote on the card) and proposes bundling the return
    credit into the new purchase.
-6. **Approve → Execute** — one click; a separate REST execute flow processes the return exception, applies
-   the credit, and places the order — real confirmation refs in seconds.
+6. **Approve → Execute** — one click; a deterministic code + HTTP chain **inside the same flow**
+   processes the return exception, applies the credit, and places the order — real confirmation
+   refs in seconds, zero LLM calls on the execution path (`docs/ARCHITECTURE.md` §1 explains why
+   Meridian doesn't need Skyway's separate execute flow).
 7. **Wrap** — SMS receipt link via xApp; knowledge Q&A with "Add to steps" available throughout.
 
 Full script with characters, transcript, and what-to-look-for: [docs/SCENARIO.md](docs/SCENARIO.md).
@@ -49,13 +51,13 @@ Full script with characters, transcript, and what-to-look-for: [docs/SCENARIO.md
 
 | Path | What lives here |
 |---|---|
-| `docs/` | SCENARIO (demo script), ARCHITECTURE, CXONE_SETUP (wiring runbook), DEMO_RUNOFSHOW, TROUBLESHOOTING |
+| `docs/` | SCENARIO (demo script), SCENARIO_CATALOG (alternate industries), ARCHITECTURE, CXONE_SETUP (wiring runbook) |
 | `package/` | Python builder → the importable Cognigy `.zip` (flows + AI agents + bundled Knowledge Store) |
-| `tile/src/` | The custom HTML copilot tile (HTML/CSS/JS) + standalone preview harness |
+| `tile/` | The custom HTML copilot tile (`meridian_tile.js`) + standalone preview harness (`harness.html`) |
 | `api/` | PHP mock backend: CRM, product catalog, order/return/credit actions, xApp SMS |
 | `knowledge/` | Policy documents — `.md` source, `.txt` upload copies (Knowledge Store rejects `.md`) |
 | `tools/` | Deploy scripts, profile-hub API scripts, test utilities |
-| `MeridianAgenticCopilot_StudioScript_1.json` | Known-working CXone Studio script — clone and re-point it (Phase 5 of CXONE_SETUP) instead of authoring from a blank canvas. API key stripped to a placeholder; see the credentials note in CXONE_SETUP.md. |
+| `MeridianAgenticCopilot_StudioScript.json` | The bundled CXone Studio script — import and re-point it (Step 3 of CXONE_SETUP) instead of authoring from a blank canvas. Carries **no credentials by design**: it authenticates through an Integration Hub connection via Connect Auth (setup in CXONE_SETUP.md Step 3). |
 
 ## Architecture in one paragraph
 
@@ -73,5 +75,7 @@ Why the previous build split execution into a second flow and why Meridian doesn
 
 ## Status
 
-🚧 **Foundation phase** — scenario locked, workspace scaffolded. Builder, tile, API, knowledge docs, and
-runbooks land next.
+✅ **Working end to end** — builder, tile, API, knowledge docs, and runbooks are all in place and
+live-proven. The customer card carries an **identity provenance strip**: green when the record came
+from a real signal (published customer id, name given in chat, id typed in chat), red when it is a
+fallback, stale, or missing — the panel never lets substitute data masquerade as live CRM data.

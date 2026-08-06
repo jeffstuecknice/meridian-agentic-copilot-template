@@ -96,6 +96,8 @@
       phone: '(415) 555-0184', occupation: 'Freelance photographer & designer',
       meta: 'Summit Circle · member since 2023',
       rightLabel: 'Orders YTD', rightValue: '9',
+      src: 'id', srcNote: 'CRM record · matched on published customer ID',
+      srcDbg: 'published=cust_101  chatName=-  chatId=-  turns=2',
       stats: [{ k: 'Lifetime spend', v: '$7,420' }, { k: 'Points', v: '12,480' }],
       badges: [
         { t: 'Summit Circle', cls: 'plat' },
@@ -283,6 +285,75 @@
         n: 0, label: 'Instant profile (PRE0 — profile only)',
         note: 'What the flow now pushes the moment the CRM record lands, before the catalog: just the customer card.',
         run: function () { push('merStateStr', { profile: PROFILE }); }
+      },
+      {
+        n: 0, label: 'Provenance — DEMO FALLBACK (no customer identified)',
+        note: 'What the agent sees when the interaction-context publish never landed: the record is the demo default, and the card says so in red before they read a word of it.',
+        run: function () {
+          var f = JSON.parse(JSON.stringify(PROFILE));
+          f.src = 'default';
+          f.srcNote = 'DEMO FALLBACK · no customer was identified — showing cust_101';
+          f.srcDbg = 'published=-  chatName=-  chatId=-  turns=0';
+          push('merStateStr', { profile: f });
+        }
+      },
+      {
+        n: 0, label: 'Provenance — STALE (lookup failed, cached record)',
+        note: 'The CRM call failed but a record was already loaded. Keeping it is correct; pretending it is live is not.',
+        run: function () {
+          var f = JSON.parse(JSON.stringify(PROFILE));
+          f.src = 'stale';
+          f.srcNote = 'STALE · lookup failed — showing the last record that loaded';
+          push('merStateStr', { profile: f });
+        }
+      },
+      {
+        n: 0, label: 'Provenance — UNKNOWN (published id not in the CRM)',
+        note: 'The platform injected a customer_id the CRM has never heard of (e.g. another demo’s wiring). The note names the bad id and which signal carried it.',
+        run: function () {
+          var f = JSON.parse(JSON.stringify(PROFILE));
+          f.src = 'unknown';
+          f.srcNote = 'DEMO FALLBACK · published ID cust_001 is not in the CRM — showing cust_101';
+          f.srcDbg = 'published=cust_001  chatName=-  chatId=-  turns=2 (json)';
+          push('merStateStr', { profile: f });
+        }
+      },
+      {
+        n: 0, label: 'Provenance — ERROR (cold-start CRM failure)',
+        note: 'The very first lookup failed and nothing is cached. REAL DATA OR ERROR: an honest red card, never an eternal boot spinner. Exact payload of PRE0_CODE’s err0 branch.',
+        run: function () {
+          push('merStateStr', { profile: {
+            initials: '!', name: 'Customer record unavailable', src: 'error',
+            srcNote: 'NO RECORD · the CRM lookup failed and nothing is cached',
+            srcDbg: 'published=-  chatName=-  chatId=-  turns=0 (json)'
+          } });
+        }
+      },
+      {
+        n: 0, label: 'Identity FLIP — retarget to Leo (PRE0 repaint → full panel)',
+        note: 'The two-push sequence a live retarget produces: an instant profile-only repaint for the NEW customer, then the recomposed full panel. The card must flip identity immediately, then the playbook follows.',
+        run: function () {
+          push('merStateStr', { profile: {
+            initials: 'LM', name: 'Leo Martinez', nickname: '', tier: 'Member',
+            meta: 'Member · member since 2026', occupation: 'student',
+            rightLabel: 'Orders YTD', rightValue: '1',
+            stats: [{ k: 'Lifetime spend', v: '$248' }, { k: 'Points', v: '40 Circle Points' }],
+            badges: [{ t: 'Member Circle', cls: 'plat' }],
+            src: 'name', srcNote: 'CRM record · matched on the name given in chat',
+            srcDbg: 'published=-  chatName=Leo Martinez  chatId=-  turns=4 (json)'
+          } });
+          setTimeout(function () {
+            var p = JSON.parse(JSON.stringify(FULL_PANEL));
+            p.profile = { initials: 'LM', name: 'Leo Martinez', tier: 'Member',
+              meta: 'Member · member since 2026', rightLabel: 'Orders YTD', rightValue: '1',
+              stats: [{ k: 'Lifetime spend', v: '$248' }, { k: 'Points', v: '40 Circle Points' }],
+              badges: [{ t: 'Member Circle', cls: 'plat' }],
+              src: 'name', srcNote: 'CRM record · matched on the name given in chat',
+              srcDbg: 'published=-  chatName=Leo Martinez  chatId=-  turns=4 (json)' };
+            p.context = 'Leo wants help choosing between the Aero 14 and the Titan 16 on a student budget.';
+            push('merStateStr', p);
+          }, 1200);
+        }
       },
       {
         n: 2, label: 'Pre-panel (profile + provisional product duo)',

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 build_meridian.py — generates Package-Meridian-Copilot.zip (import via Cognigy "Upload Package").
 
@@ -167,13 +167,42 @@ PROFILE_JS = (
     "  var tier=rec.tier||'';var badges=[];\n"
     "  if(tier)badges.push({t:tier+' Circle',cls:'plat'});\n"
     "  if(sstr(rec.valueNote).toLowerCase().indexOf('top')>=0)badges.push({t:'Top-10% Spend',cls:'good'});\n"
+    # PROVENANCE (see merCrmSrc in CRM_PREP/CRM_POST): the panel states, on the record itself,
+    # which signal produced it. Anything other than a live CRM match reads as a fault, not a nuance.
+    "  var _s=String(context.merCrmSrc||'');\n"
+    "  var _bad=String(context.merCrmBad||'?');\n"
+    # name the bad id by the signal that carried it — 'published' when the platform injected it,
+    # 'typed in chat' for the tester hook — so the note never accuses the wrong integration.
+    "  var _bl=(String(context.merCrmBadSrc||'id')==='chatid')?'ID typed in chat ':'published ID ';\n"
+    "  var _n={id:'CRM record \\u00b7 matched on published customer ID',\n"
+    "    name:'CRM record \\u00b7 matched on the name given in chat',\n"
+    "    chatid:'CRM record \\u00b7 matched on a customer ID typed in chat',\n"
+    "    'default':'DEMO FALLBACK \\u00b7 no customer was identified \\u2014 showing "
+    + DEMO_DEFAULT_CID + "',\n"
+    "    unknown:'DEMO FALLBACK \\u00b7 '+_bl+_bad+' is not in the CRM \\u2014 showing "
+    + DEMO_DEFAULT_CID + "',\n"
+    "    stale:'STALE \\u00b7 lookup failed \\u2014 showing the last record that loaded',\n"
+    "    error:'NO RECORD \\u00b7 the CRM lookup failed and nothing is cached'};\n"
     "  return {initials:rec.initials||String(rec.name||'?').substr(0,2).toUpperCase(),name:rec.name||'',nickname:nick||'',tier:tier,\n"
     "    phone:sstr(rec.phoneDisplay)||sstr(rec.phone),occupation:sstr(rec.occupation),\n"
     "    meta:(tier?(tier+' Circle'):'')+(rec.memberSince?(' \\u00b7 member since '+rec.memberSince):''),\n"
     "    rightLabel:'Orders YTD',rightValue:String(rec.ordersYtd||''),\n"
     "    stats:[{k:'Lifetime spend',v:String(rec.lifetimeSpend||'')},{k:'Points',v:String(rec.pointsBalance||'')}],\n"
+    "    src:_s,srcNote:_n[_s]||'',srcDbg:String(context.merIdDbg||''),\n"
     "    badges:badges};\n"
     "}\n")
+
+# MASKING-PROOF TRANSCRIPT READ. Cognigy PII-masks context values that are OBJECTS, and merTx is
+# an array of objects holding customer utterances — so it comes back EMPTY downstream exactly when
+# someone says a name. Live-diagnosed 2026-08-06: CRM_PREP saw turns=0 while the sentiment agent
+# read the same message fine. Same fix already used for merCrm -> merCrmStr: keep the canonical
+# copy as a JSON STRING and parse it. merTx is still written for anything that reads it directly.
+# txSrc records WHICH copy actually had the transcript, so the panel can distinguish "the masking
+# workaround is running and still found nothing" from "an older package is still imported".
+TX_READ = (
+    "var tx=[];var txSrc='none';\n"
+    "try{var _tj=JSON.parse(context.merTxJson||'[]');if(_tj&&_tj.length){tx=_tj;txSrc='json';}}catch(e){}\n"
+    "if(!tx.length && context.merTx && context.merTx.length){tx=context.merTx;txSrc='obj';}\n")
 
 CONVO_BUILD = (
     "var aa=(input.data&&input.data._cognigy&&input.data._cognigy._agentAssist)||null;\n"
@@ -185,7 +214,7 @@ CONVO_BUILD = (
     # CXone opens every chat with an automatic "Begin Conversation" customer message — keep the
     # turn (it triggers the pre-load) but keep the phrase out of the transcript.
     "if(/^begin conversation$/i.test(txt))txt='';\n"
-    "var tx=context.merTx||[];\n"
+    + TX_READ +
     "var dup=false;\n"
     "if(!isPayload && txt && pl!=='system'){\n"
     "  var lastE=tx.length?tx[tx.length-1]:null;\n"
@@ -193,10 +222,18 @@ CONVO_BUILD = (
     "  else { tx.push({role:role,text:txt}); if(tx.length>20) tx=tx.slice(-20); }\n"
     "}\n"
     "api.addToContext('merTx',tx,'simple');\n"
+    "api.addToContext('merTxJson',JSON.stringify(tx),'simple');\n"
     "api.addToContext('merDupTurn',dup,'simple');\n"
     "api.addToContext('merLastPart',(role==='agent'&&txt)?'Agent':(part||''),'simple');\n"
     "var cc=(input.data&&input.data['copilot-customer-context'])||{};\n"
-    "var cid=cc.customer_id||context.merCid||'';\n"
+    # a published identity the chat has explicitly RETARGETED away from is dead — without this
+    # gate the IC context re-asserts the OLD customer's id/nickname every turn after a flip,
+    # resurrecting exactly the greet-the-new-customer-by-the-old-name bug the flip clears kill.
+    # A genuinely NEW published id (differs from the overridden one) lifts the override.
+    "var ccid=String(cc.customer_id||'');\n"
+    "if(ccid && ccid===String(context.merCidOverridden||'')){ccid='';cc={};}\n"
+    "else if(ccid && context.merCidOverridden){api.addToContext('merCidOverridden','','simple');}\n"
+    "var cid=ccid||context.merCid||'';\n"
     "var nick=cc.customer_nickname||context.merNickFull||'';\n"
     "api.addToContext('merCid',cid,'simple');\n"
     "api.addToContext('merNickFull',nick,'simple');\n"
@@ -230,34 +267,82 @@ GREET_PREP = (
     + ("api.log('[MER][GREET] '+(g||'(skip)'),'info');\n" if DEBUG else ""))
 
 CRM_PREP = (
-    "var tx=context.merTx||[];\n"
+    TX_READ +
     "var chatName='';\n"
-    # phrase match is case-insensitive (lowercased copy finds the trigger), the NAME must be
-    # capitalized in the ORIGINAL casing — "This is Leo Martinez" re-targets, "i'm tired" doesn't.
-    "for(var i=0;i<tx.length;i++){ var t0=String(tx[i].text||'');\n"
-    "  var pm=t0.toLowerCase().match(/(?:this is|i am|i'm|my name is)\\s/);\n"
-    "  if(pm){var rest=t0.slice(pm.index+pm[0].length);\n"
-    "    var nm=rest.match(/^\\s*([A-Z][a-zA-Z'\\-]+(?:\\s+[A-Z][a-zA-Z'\\-]+)?)/);\n"
-    "    if(nm){chatName=nm[1];break;}} }\n"
+    # NAME CAPTURE, redesigned 2026-08-06. The CRM is the VERIFIER, not this regex — a candidate
+    # that misses the CRM is soft-failed by CRM_POST (blacklisted + prior identity kept), so loose
+    # capture here is safe. Three rules, each earned by a live failure:
+    #   - newest statement wins (scan backwards) — a re-target must beat an earlier intro
+    #   - CUSTOMER turns only — an agent typing "this is ridiculous" must never re-target
+    #   - lowercase accepted — chat customers type "i am maya torres"; capitalized match is
+    #     tried first so proper nouns keep beating sentence fragments
+    "var badProbes=[];try{badProbes=JSON.parse(context.merNameBadJson||'[]');}catch(e){}\n"
+    # The phrase must START the message (an optional greeting may precede it) — "The problem is
+    # I am Platinum tier" must not probe "Platinum". Curly apostrophe: phones autocorrect i'm→i’m.
+    "for(var i=tx.length-1;i>=0;i--){ var e0=tx[i]||{};\n"
+    "  if(String(e0.role||'')!=='customer')continue;\n"
+    "  var t0=String(e0.text||'');\n"
+    "  var pm=t0.toLowerCase().match(/^\\s*(?:(?:hi|hey|hello)[,!.\\s]+)?(?:this is|i am|i['\\u2019]m|my name is)\\s+/);\n"
+    "  if(!pm)continue;\n"
+    "  var rest=t0.slice(pm[0].length);\n"
+    "  var nm=rest.match(/^\\s*([A-Z][a-zA-Z'\\u2019\\-]+(?:\\s+[A-Z][a-zA-Z'\\u2019\\-]+)?)/);\n"
+    "  if(!nm)nm=rest.match(/^\\s*([a-zA-Z'\\u2019\\-]{3,}(?:\\s+[a-zA-Z'\\u2019\\-]{2,})?)/);\n"
+    "  if(!nm)continue;\n"
+    "  var cand=nm[1];\n"
+    # a blacklisted two-word capture retries as its first word ("Maya I'll" -> "Maya") before
+    # falling through to older statements — the CRM stays the judge at every rung.
+    "  if(badProbes.indexOf(cand)>=0){var one=cand.split(/\\s+/)[0];\n"
+    # ladder only proper nouns: "Maya I'll" retries as "Maya"; "very upset" does NOT retry "very"
+    "    if(one!==cand && one.length>=3 && /^[A-Z]/.test(one) && badProbes.indexOf(one)<0){chatName=one;break;}\n"
+    "    continue;}\n"
+    "  chatName=cand;break;\n"
+    "}\n"
+    # LATCH: signals must survive the 20-turn transcript window — "I am Maya Torres" scrolling
+    # out of the cap must not silently swap the record back. Scanned (newest) wins over latched.
+    "if(chatName){api.addToContext('merChatName',chatName,'simple');}\n"
+    "else if(context.merChatName && badProbes.indexOf(String(context.merChatName))<0){chatName=String(context.merChatName);}\n"
     # tester hook: a customer id spoken/pasted in chat (cust_501) is the strongest signal of all —
     # latest one wins and beats any earlier name capture (scenario switching by id).
     "var chatId='';\n"
     "for(var k=tx.length-1;k>=0;k--){var m0=String(tx[k].text||'').match(/\\bcust[_-]?(\\d{3,4})\\b/i);\n"
     "  if(m0){chatId='cust_'+m0[1];break;}}\n"
+    # LATCH, symmetric with merChatName: a typed id must survive the 20-turn window too, or the
+    # identity silently reverts to the published/default record ~20 utterances later.
+    "if(chatId){api.addToContext('merChatId',chatId,'simple');}\n"
+    "else if(context.merChatId && context.merCrmBad!==String(context.merChatId)){chatId=String(context.merChatId);}\n"
     "var cid=context.merCid||'';\n"
     "if(chatId){cid=chatId;chatName='';}\n"
+    # PROVENANCE: which signal identified this customer. The panel renders this verbatim, so a
+    # demo-default record can never masquerade as a real CRM hit (see the real-data rule in
+    # CLAUDE.md). Set BEFORE the two fallbacks below so each can overwrite it with its own reason.
+    "var src=chatId?'chatid':(chatName?'name':(cid?'id':''));\n"
     # no identify signal yet (contact accept / tile boot) -> demo default so the briefing builds
     # on the very first turn; a name spoken in chat later still wins (name-first lookup).
-    "if(!cid && !chatName){cid='" + DEMO_DEFAULT_CID + "';"
+    "if(!cid && !chatName){cid='" + DEMO_DEFAULT_CID + "';src='default';"
     + ("api.log('[MER][CRM>] no identify signal yet - using demo default '+cid,'info');" if DEBUG else "") + "}\n"
     # a platform-injected customer_id the CRM doesn't know (e.g. copilot-customer-context from
     # another demo's wiring) must not 404-loop: after one failed try, fall to the demo default.
-    "if(cid && !chatName && context.merCrmBad===cid){cid='" + DEMO_DEFAULT_CID + "';"
+    "if(cid && !chatName && context.merCrmBad===cid){cid='" + DEMO_DEFAULT_CID + "';src='unknown';"
     + ("api.log('[MER][CRM>] id '+context.merCrmBad+' unknown to CRM - using demo default '+cid,'info');" if DEBUG else "") + "}\n"
+    "api.addToContext('merCrmSrc',src,'simple');\n"
+    # merNameProbe marks this lookup as a spoken-name PROBE so CRM_POST can soft-fail a miss
+    # (blacklist the candidate, keep the prior identity) instead of flagging the record stale.
+    "api.addToContext('merNameProbe',(src==='name')?chatName:'','simple');\n"
+    # The identify inputs, verbatim, rendered under the provenance strip. Cognigy's Live Logging
+    # pane does not surface api.log() from these code nodes (confirmed 2026-08-06), so the panel
+    # itself is the diagnostic: it shows WHY a record was chosen, not just which one.
+    "api.addToContext('merIdDbg','published=' + (context.merCid||'-') + "
+    "'  chatName=' + (chatName||'-') + '  chatId=' + (chatId||'-') + "
+    "'  turns=' + tx.length + ' (' + txSrc + ')' + "
+    "(badProbes.length?('  ignored='+badProbes.join('|')):''),'simple');\n"
     "api.addToContext('merCrmTried',cid,'simple');\n"
     "function q(v){return encodeURIComponent(v==null?'':String(v));}\n"
     "var url='" + MOCK_API + "?action=get_customer&customer_id='+q(cid)+'&name='+q(chatName);\n"
-    "var crmSkip=(!!context.merCrm && url===context.merCrmUrl)?'skip':'go';\n"
+    # skip only repeats a lookup that SUCCEEDED (merCrmUrlOk commits in CRM_POST) — a failed URL
+    # retries naturally. A skip turn also restores the provenance the success committed, so this
+    # turn's optimistic recompute can never silently relabel an honest 'stale'.
+    "var crmSkip=(context.merCrmOk==='1' && url===context.merCrmUrlOk)?'skip':'go';\n"
+    "if(crmSkip==='skip' && context.merCrmSrcOk){api.addToContext('merCrmSrc',String(context.merCrmSrcOk),'simple');}\n"
     "api.addToContext('merCrmSkip',crmSkip,'simple');\n"
     "api.addToContext('merCrmUrl',url,'simple');\n"
     "var nick=String(context.merNickFull||'').split(/\\s+/)[0]||'';\n"
@@ -279,17 +364,71 @@ CRM_POST = (
     "var r=(raw&&typeof raw.result==='object'&&raw.result)?raw.result:((raw&&typeof raw.body==='object'&&raw.body)?raw.body:raw);\n"
     "if(typeof r==='string'){try{r=JSON.parse(r);}catch(e){}}\n"
     "var rec=(r&&r.customer)||null;\n"
-    # KEEP-LAST-GOOD: a failed lookup (unknown injected id, transient 404) must never wipe a
-    # working record — live-diagnosed 2026-07-31: cust_001 from copilot-customer-context nulled
-    # merCrm and the recompute guard then stopped EVERY turn (steps never composed again).
-    "if(!rec){api.addToContext('merCrmBad',context.merCrmTried||'','simple');}\n"
-    "if(!rec && context.merCrm){\n"
-    "  api.log('[MER][CRM<] lookup failed for '+(context.merCrmTried||'?')+' \\u2014 keeping cached '+String((context.merCrm&&context.merCrm.name)||'record'),'error');\n"
-    "}else{\n"
+    "var probe=String(context.merNameProbe||'');\n"
+    # DEFINITIVE = the CRM itself said no (ok:false body). A transient failure (timeout, DNS,
+    # error wrapper) must never blacklist a name or latch a bad id — the uncommitted URL simply
+    # retries next turn. The mock API answers misses 200+ok:false so this signal is visible.
+    "var definitive=!!(r && typeof r==='object' && (r.ok===false || /not found/i.test(String(r.error||''))));\n"
+    "function blAdd(c){var bl=[];try{bl=JSON.parse(context.merNameBadJson||'[]');}catch(e){}\n"
+    "  if(bl.indexOf(c)<0){bl.push(c);if(bl.length>8)bl=bl.slice(-8);\n"
+    "    api.addToContext('merNameBadJson',JSON.stringify(bl),'simple');}\n"
+    "  if(String(context.merChatName||'')===c){api.addToContext('merChatName','','simple');}}\n"
+    # Three outcomes, each with honest provenance. Successes COMMIT (merCrmOk/UrlOk/SrcOk/LastId)
+    # — every other path leaves the last commit standing, so nothing downstream ever trusts an
+    # uncommitted lookup. An identity FLIP invalidates the per-customer artifacts and raises
+    # merCrmFlip, which forces the push path (PRE0/gate/recompute/policy) to run this turn.
+    "if(rec){\n"
+    "  if(probe){var rn=String(rec.name||'').toLowerCase(),pn=probe.toLowerCase();\n"
+    "    if(rn.indexOf(pn)<0 && pn.indexOf(rn)<0){blAdd(probe);\n"
+    "      api.addToContext('merCrmSrc',(context.merCid?'id':'default'),'simple');}}\n"
+    # a latched bad id that has RECOVERED (transient outage healed) must stop poisoning
+    "  if(context.merCrmBad && context.merCrmBad===context.merCrmTried){api.addToContext('merCrmBad','','simple');}\n"
+    "  var newId=String(rec.customer_id||'');\n"
+    "  var flip=(String(context.merCrmLastId||'')!=='' && newId!=='' && newId!==String(context.merCrmLastId));\n"
+    "  if(flip){\n"
+    # the OLD customer's artifacts must never brief the NEW customer: beat labels, policy
+    # findings, and the published nickname all die with the flip (live-diagnosed: the composer
+    # kept greeting the new customer by the old one's name).
+    "    api.addToContext('merPanelSlim',[],'simple');api.addToContext('merPanelSlimJson','','simple');\n"
+    "    api.addToContext('merPolicy',null,'simple');api.addToContext('merPolicyStr','','simple');\n"
+    "    api.addToContext('merPolicyForMsg','','simple');\n"
+    "    api.addToContext('merNickFull','','simple');api.addToContext('merNick','','simple');\n"
+    "    api.addToContext('merNickLine','','simple');\n"
+    # the superseded PUBLISHED id is dead to this session: record it so CONVO_BUILD stops
+    # re-importing it (and its nickname) every turn, and drop the sticky copy.
+    "    var oldCid=String(context.merCid||'');\n"
+    "    if(oldCid && oldCid!==newId){api.addToContext('merCidOverridden',oldCid,'simple');\n"
+    "      api.addToContext('merCid','','simple');}\n"
+    "    api.addToContext('merCrmFlip','1','simple');\n"
+    "    api.log('[MER][CRM<] identity flip '+context.merCrmLastId+' -> '+newId,'info');\n"
+    "  }\n"
+    "  api.addToContext('merCrmLastId',newId,'simple');\n"
+    "  api.addToContext('merCrmSrcGood',String(context.merCrmSrc||''),'simple');\n"
+    "  api.addToContext('merCrmSrcOk',String(context.merCrmSrc||''),'simple');\n"
+    "  api.addToContext('merCrmUrlOk',String(context.merCrmUrl||''),'simple');\n"
+    "  api.addToContext('merCrmOk','1','simple');\n"
     "  api.addToContext('merCrm',rec,'simple');\n"
-    "  api.addToContext('merBrand',(rec&&rec.brand)||'Northlight Electronics','simple');\n"
+    "  api.addToContext('merBrand',rec.brand||'Northlight Electronics','simple');\n"
     # masking-proof: context OBJECT values get PII-masked; the JSON STRING survives intact.
-    "  api.addToContext('merCrmStr',rec?JSON.stringify(rec,null,2):'(no customer identified yet)','simple');\n"
+    "  api.addToContext('merCrmStr',JSON.stringify(rec,null,2),'simple');\n"
+    "}else if(probe){\n"
+    # blacklist ONLY when the CRM definitively rejected the name — a network blip must not
+    # permanently blacklist the customer's real name (one 8s timeout would otherwise lock the
+    # session to the demo default). Transient: leave probe + latch alone, retry is natural.
+    "  if(definitive)blAdd(probe);\n"
+    "  if(context.merCrmOk==='1'){api.addToContext('merCrmSrc',String(context.merCrmSrcGood||'stale'),'simple');}\n"
+    "  else{api.addToContext('merCrmSrc','error','simple');\n"
+    "       api.addToContext('merCrmStr','(no customer identified yet)','simple');}\n"
+    "}else{\n"
+    # only a DEFINITIVE not-found latches the bad id (see above) — a transient failure must not
+    # brand the id, or one blip locks the demo default in for the session (unrecoverable by
+    # design of the guard, which swaps the id BEFORE the lookup).
+    "  if(definitive){api.addToContext('merCrmBad',context.merCrmTried||'','simple');\n"
+    "    api.addToContext('merCrmBadSrc',String(context.merCrmSrc||'id'),'simple');}\n"
+    "  if(context.merCrmOk==='1'){api.addToContext('merCrmSrc','stale','simple');\n"
+    "    api.log('[MER][CRM<] lookup failed for '+(context.merCrmTried||'?')+' \\u2014 keeping cached '+String((context.merCrm&&context.merCrm.name)||'record'),'error');\n"
+    "  }else{api.addToContext('merCrmSrc','error','simple');\n"
+    "    api.addToContext('merCrmStr','(no customer identified yet)','simple');}\n"
     "}\n"
     + ("api.log('[MER][CRM<] '+(rec?(rec.name+' ('+rec.tier+')'):'NO RECORD'),'info');\n" if DEBUG else ""))
 
@@ -317,25 +456,40 @@ PROD_POST = (
 # The tile's merge keeps it when richer pushes follow. Same gating as the pre-panel.
 PRE0_CODE = (
     PROFILE_JS +
-    "if(!context.merPanelEsc && (context.merPanelN||0)===0 && context.merCrm){\n"
+    # fires on: first record (panel #0), an identity FLIP (the retarget must repaint the card
+    # NOW — the composed panel follows seconds later), or a cold-start CRM failure (REAL DATA OR
+    # ERROR: an honest red card, never an eternal boot spinner).
+    "var first=(!context.merPanelEsc && (context.merPanelN||0)===0 && context.merCrmOk==='1');\n"
+    "var flip0=(context.merCrmFlip==='1' && context.merCrmOk==='1');\n"
+    "var err0=(context.merCrmSrc==='error' && context.merCrmOk!=='1' && (context.merPanelN||0)===0);\n"
+    "if(first || flip0){\n"
     "  var rec=null;try{var _rj=JSON.parse(context.merCrmStr||'');if(_rj&&typeof _rj==='object')rec=_rj;}catch(e){}\n"
     "  if(!rec)rec=context.merCrm||{};\n"
     "  var pre0={profile:buildProfile(rec,context.merNick||'')};\n"
     "  var es0=JSON.stringify(pre0).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
     "  api.addToContext('merPre0Esc',es0,'simple');\n"
-    + ("  api.log('[MER][PRE0] instant profile push','info');\n" if DEBUG else "")
-    + "}else{api.addToContext('merPre0Esc','','simple');}\n")
+    + ("  api.log('[MER][PRE0] instant profile push'+(flip0?' (identity flip)':''),'info');\n" if DEBUG else "")
+    + "}else if(err0){\n"
+    "  var pe={profile:{initials:'!',name:'Customer record unavailable',src:'error',\n"
+    "    srcNote:'NO RECORD \\u00b7 the CRM lookup failed and nothing is cached',\n"
+    "    srcDbg:String(context.merIdDbg||'')}};\n"
+    "  var ese=JSON.stringify(pe).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
+    "  api.addToContext('merPre0Esc',ese,'simple');\n"
+    "}else{api.addToContext('merPre0Esc','','simple');}\n")
 
 # Keyed on merPanelN===0 (not just an empty merPanelEsc) so a composer double-failure
 # mid-conversation can't overwrite the tile's last-good playbook with the skeleton.
 PRE_PANEL_CODE = (
     PROFILE_JS +
-    "if(!context.merPanelEsc && (context.merPanelN||0)===0 && context.merCrm){\n"
+    "if(!context.merPanelEsc && (context.merPanelN||0)===0 && context.merCrmOk==='1'){\n"
     "  var rec=null;try{var _rj=JSON.parse(context.merCrmStr||'');if(_rj&&typeof _rj==='object')rec=_rj;}catch(e){}\n"
     "  if(!rec)rec=context.merCrm||{};\n"
     # zero-LLM provisional comparison: both catalog laptops render instantly (photos are
     # tile-side statics keyed on sku); the composer's real ranked cards replace it.
-    "  var prods=context.merProds||[];var cmpPre=null;\n"
+    # masking-proof read: the JSON string survives context masking, the object may not.
+    "  var prods=[];try{var _pj=JSON.parse(context.merProdStr||'');if(_pj&&_pj.length)prods=_pj;}catch(e){}\n"
+    "  if(!prods.length)prods=context.merProds||[];\n"
+    "  var cmpPre=null;\n"
     "  var nm=String(rec.nickname||rec.name||'the customer').split(/\\s+/)[0];\n"
     "  if(prods.length>=2){cmpPre={provisional:true,\n"
     "    intro:'Both options are on the table \\u2014 the AI Agent will rank them from what '+nm+' says matters.',\n"
@@ -380,18 +534,27 @@ GATE_PARSE = (
     "else if(raw&&typeof raw==='object')g=raw;\n"
     "var route=(g&&['request','question','skip'].indexOf(g.route)>=0)?g.route:'skip';\n"
     "api.addToContext('merGate',{route:route,query:(g&&g.query)||''},'simple');\n"
+    # masking-proof mirrors: downstream switches must read STRINGS, not the object above.
+    "api.addToContext('merGateRoute',route,'simple');\n"
+    "api.addToContext('merGateQuery',String((g&&g.query)||''),'simple');\n"
     "var hasPanel=(context.merPanelN||0)>0;\n"
     "var decision=(route==='skip'&&hasPanel)?'skip':(route==='question'?'question':'go');\n"
     "if(context.merGateMsg==='(no customer message yet)'&&hasPanel)decision='skip';\n"
+    # an identity FLIP overrides the classifier: 'my name is maya torres' is filler to the gate
+    # but it just changed WHO the panel is about — the composer must re-run (live-diagnosed
+    # 2026-08-06: gate said skip, the boot panel's fallback badge fossilized on screen).
+    "if(context.merCrmFlip==='1')decision='go';\n"
     "api.addToContext('merRoute',decision,'simple');\n"
     # live sentiment: push only when it actually shifted (>=5pts or a new label)
     "var sv=(g&&g.sentiment)||null;var sesc='';\n"
     "if(sv&&(+sv.pct>0||sv.label)){\n"
     "  var sp=Math.max(0,Math.min(100,Math.round(+sv.pct||0)));\n"
-    "  var prev=context.merSent||null;\n"
+    "  var prev=null;try{prev=JSON.parse(context.merSentJson||'');}catch(e){}\n"
+    "  if(!prev)prev=context.merSent||null;\n"
     "  if(!prev||Math.abs((+prev.pct||0)-sp)>=5||String(sv.label||'')!==String(prev.label||'')){\n"
     "    var cur={pct:sp,label:String(sv.label||''),note:String(sv.note||'')};\n"
     "    api.addToContext('merSent',cur,'simple');\n"
+    "    api.addToContext('merSentJson',JSON.stringify(cur),'simple');\n"
     "    sesc=JSON.stringify(cur).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
     + ("    api.log('[MER][SENT] '+sp+'% '+String(sv.label||''),'info');\n" if DEBUG else "")
     + "  }\n"
@@ -421,7 +584,7 @@ STAGE2_CODE = (
 POLICY_QUERY = (
     "var rec=null;try{var _rj=JSON.parse(context.merCrmStr||'');if(_rj&&typeof _rj==='object')rec=_rj;}catch(e){}\n"
     "if(!rec)rec=context.merCrm||{};\n"
-    "var q=[rec.brand||'',rec.program||'',rec.tier||'',(context.merGate&&context.merGate.query)||'',"
+    "var q=[rec.brand||'',rec.program||'',rec.tier||'',String(context.merGateQuery||''),"
     "(rec.openReturn&&rec.openReturn.item)?('return window '+rec.openReturn.item):'',"
     # per-scenario retrieval hint from the CRM record; falls back to the retail boilerplate
     "rec.policyKeywords||'return window loyalty tier benefits credit bundling recommendation guidance shipping'"
@@ -485,7 +648,10 @@ POLICY_PARSE = (
     + ("api.log('[MER][POLICY<] '+JSON.stringify(a).slice(0,400),'info');\n" if DEBUG else ""))
 
 COMPOSER_PREP = (
-    "var slim=context.merPanelSlim||[];\n"
+    # masking-proof read of the beat ledger (an ARRAY — the exact class that came back empty
+    # for merTx); the JSON string is canonical, the object is the fallback.
+    "var slim=[];try{var _sj=JSON.parse(context.merPanelSlimJson||'[]');if(_sj&&_sj.length)slim=_sj;}catch(e){}\n"
+    "if(!slim.length)slim=context.merPanelSlim||[];\n"
     "api.addToContext('merPlaybookLine',(slim.length?('CURRENT PLAYBOOK \\u2014 these beats ALREADY EXIST on the panel. For any beat representing the same step, reuse the EXACT id and EXACT label verbatim; NEVER output a new beat that duplicates one of these under different wording: '+JSON.stringify(slim)):''),'simple');\n"
     # stage 3 — findings are in hand, the composer LLM starts writing the panel
     "var st3=JSON.stringify({n:3,total:3,label:'Findings ready \\u2014 composing the playbook'})"
@@ -548,7 +714,9 @@ MERGE_CODE = (
     "  p.profile=buildProfile(rec,context.merNick||'');\n"
     "  p.attempted=p.attempted||[];p.recommendations=p.recommendations||[];p.needs=p.needs||[];\n"
     "  // validate the LLM's 'done' claims on TALK beats against the REAL transcript\n"
-    "  var vtx=context.merTx||[];var vab=[];\n"
+    "  var vtx=[];try{var _vj=JSON.parse(context.merTxJson||'[]');if(_vj&&_vj.length)vtx=_vj;}catch(e){}\n"
+    "  if(!vtx.length && context.merTx && context.merTx.length)vtx=context.merTx;\n"
+    "  var vab=[];\n"
     "  for(var vi=0;vi<vtx.length;vi++){var vr=String(vtx[vi].role||'').toLowerCase();\n"
     "    if(vr==='agent')vab.push(String(vtx[vi].text||'').toLowerCase().replace(/[^a-z0-9\\s]/g,' '));}\n"
     "  var vblob=vab.join(' | ');\n"
@@ -576,6 +744,10 @@ MERGE_CODE = (
     "  if(!abortPush){\n"
     "  var slim=[];for(var i=0;i<p.recommendations.length;i++){var r=p.recommendations[i];if(r&&r.id&&r.label)slim.push({id:r.id,label:r.label});}\n"
     "  api.addToContext('merPanelSlim',slim,'simple');\n"
+    "  api.addToContext('merPanelSlimJson',JSON.stringify(slim),'simple');\n"
+    # the flip is consumed: the fresh panel (new profile, new provenance) is on its way to the
+    # tile. If this push aborted, the flag survives and the next turn recomputes again.
+    "  if(context.merCrmFlip==='1')api.addToContext('merCrmFlip','','simple');\n"
     "  api.addToContext('merPanelN',p.recommendations.length,'simple');\n"
     "  var es=JSON.stringify(p).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
     "  api.addToContext('merPanelEsc',es,'simple');\n"
@@ -666,7 +838,7 @@ KA_PREP_CODE = (
     + ("api.log('[MER][ASK>] '+String(context.merAskQuery||''),'info');\n" if DEBUG else ""))
 
 Q_PREP_CODE = (
-    "api.addToContext('merAskQuery',String((context.merGate&&context.merGate.query)||context.merGateMsg||'').slice(0,300),'simple');\n"
+    "api.addToContext('merAskQuery',String(context.merGateQuery||context.merGateMsg||'').slice(0,300),'simple');\n"
     "api.addToContext('merAskId','auto-'+((context.merAskN||0)+1),'simple');\n"
     "api.addToContext('merAskN',(context.merAskN||0)+1,'simple');\n"
     + ("api.log('[MER][ASK>] (auto) '+String(context.merAskQuery||''),'info');\n" if DEBUG else ""))
@@ -1123,7 +1295,9 @@ def build():
                     # pre-panel first, so the brain runs BEHIND the cards, not in front of them).
                     # Without this, the Begin-Conversation turn ran the full 12-15s brain on an empty
                     # conversation and the boot ping (the profile paint) queued behind it.
-                    'operator': "(!context.merCrm)?'stop':((context.merGateMsg==='(no customer message yet)'&&context.merBootTurn!==true)?'stop':(((context.merLastPart==='Agent'||context.merDupTurn===true||context.merBootTurn===true)&&(context.merPanelN||0)>0)?'stop':'go'))"},
+                    # merCrmOk (a string) instead of the merCrm object: masking-proof. A flip
+                    # turn always recomputes — the retarget is the one turn that must not stop.
+                    'operator': "(context.merCrmOk!=='1')?'stop':(context.merCrmFlip==='1'?'go':((context.merGateMsg==='(no customer message yet)'&&context.merBootTurn!==true)?'stop':(((context.merLastPart==='Agent'||context.merDupTurn===true||context.merBootTurn===true)&&(context.merPanelN||0)>0)?'stop':'go')))"},
          'intentLevel': 'input.intent', 'useStrict': ''})))
     N.append((RC_STOP, node(RC_STOP, 'case', 'stop', {'case': {'value': 'stop'}})))
     N.append((RC_DEF, node(RC_DEF, 'default', 'go', {})))
@@ -1147,9 +1321,11 @@ def build():
     N.append((RT_DEF, node(RT_DEF, 'default', 'go (request)', {})))
     N.append((POL_SW, node(POL_SW, 'switch', 'Policy findings fresh?',
         {'switch': {'type': 'cognigyScript',
-                    # the RAW gate route lives in merGate.route — merRoute holds the mapped
-                    # decision and can never equal 'request' (the v4 stale-findings bug).
-                    'operator': "(!context.merPolicy||((context.merGate&&context.merGate.route)==='request'&&context.merGateMsg!==context.merPolicyForMsg))?'run':'skip'"},
+                    # the RAW gate route lives in merGateRoute (string mirror — masking-proof;
+                    # merRoute holds the mapped decision and can never equal 'request', the v4
+                    # stale-findings bug). A flip always re-runs: the findings belong to the
+                    # OLD customer's tier and windows.
+                    'operator': "(context.merCrmFlip==='1'||!context.merPolicyStr||(context.merGateRoute==='request'&&context.merGateMsg!==context.merPolicyForMsg))?'run':'skip'"},
          'intentLevel': 'input.intent', 'useStrict': ''})))
     N.append((PL_RUN, node(PL_RUN, 'case', 'run', {'case': {'value': 'run'}})))
     N.append((PL_DEF, node(PL_DEF, 'default', 'cached', {})))

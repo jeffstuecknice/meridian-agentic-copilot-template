@@ -1,0 +1,481 @@
+{
+ "scriptContent": {
+  "header": {
+   "scriptName": "Jeff_Stueck\\MeridianAgenticCopilot_StudioScript",
+   "busNo": 4611565,
+   "mediaType": 9,
+   "mediaTypeName": "digital",
+   "purposeType": "General",
+   "variableRedaction": "",
+   "nextActionId": 13,
+   "status": "Active",
+   "lastSavedIn": "cxs",
+   "divisionNo": 1,
+   "wasLayoutAlgorithmRun": true
+  },
+  "actions": {
+   "1": {
+    "actionId": 1,
+    "libraryId": "B2F794C5-0232-40E7-9830-76D573BF57D7",
+    "name": "BEGIN",
+    "version": 1,
+    "label": "Begin",
+    "dependencyOrder": "0",
+    "implType": "0",
+    "x": 120,
+    "y": 220,
+    "xws": 120,
+    "yws": 220
+   },
+   "2": {
+    "actionId": 2,
+    "libraryId": "7DA9B743-98F4-4899-A5CE-62C9CD414B5B",
+    "name": "REQAGENT_DIGITAL",
+    "version": 1,
+    "label": "ReqAgent",
+    "dependencyOrder": "1",
+    "implType": "0",
+    "x": 1000,
+    "y": 220,
+    "xws": 1000,
+    "yws": 220
+   },
+   "3": {
+    "actionId": 3,
+    "libraryId": "B333DA63-33C8-4297-A58A-E9546CF7F0F2",
+    "name": "SNIPPET",
+    "version": 1,
+    "label": "Set AgentID",
+    "dependencyOrder": "2",
+    "implType": "0",
+    "x": 536,
+    "y": 420,
+    "xws": 536,
+    "yws": 420
+   },
+   "6": {
+    "actionId": 6,
+    "libraryId": "B2AEDEE9-AB1E-4923-9D64-04CEE8118482",
+    "name": "AgentAssistV1_LIBID_b2aedee9-ab1e-4923-9d64-04cee8118482",
+    "version": 1,
+    "label": "Agent Assist",
+    "dependencyOrder": "3",
+    "implType": "1",
+    "x": 760,
+    "y": 420,
+    "xws": 760,
+    "yws": 420
+   },
+   "7": {
+    "actionId": 7,
+    "libraryId": "CDDC91CC-F363-4E31-A13A-D742A81A68A3",
+    "name": "ONASSIGNMENTCHANGED_DIGITAL",
+    "version": 1,
+    "label": "OnAssignment",
+    "dependencyOrder": "4",
+    "implType": "0",
+    "x": 320,
+    "y": 420,
+    "xws": 320,
+    "yws": 420
+   },
+   "9": {
+    "actionId": 9,
+    "libraryId": "2854BB57-EE90-4957-8E66-10D2DC20E49E",
+    "name": "GET_CUSTOM_FIELDS_CC_CONTACT",
+    "version": 1,
+    "label": "Get Custom Fields",
+    "dependencyOrder": "4",
+    "implType": "0",
+    "x": 320,
+    "y": 220,
+    "xws": 320,
+    "yws": 220
+   },
+   "10": {
+    "actionId": 10,
+    "name": "ConnectAuth",
+    "version": 1,
+    "label": "Connect Auth",
+    "dependencyOrder": "0",
+    "implType": "1",
+    "x": 536,
+    "y": 220,
+    "libraryId": "CC121133-C221-4CDA-BEA2-D8961AD11644",
+    "xws": 536,
+    "yws": 220
+   },
+   "12": {
+    "actionId": 12,
+    "name": "SNIPPET",
+    "version": 1,
+    "label": "Map Context + Publish",
+    "dependencyOrder": "0",
+    "implType": "0",
+    "x": 760,
+    "y": 220,
+    "libraryId": "B333DA63-33C8-4297-A58A-E9546CF7F0F2",
+    "xws": 760,
+    "yws": 220
+   }
+  },
+  "properties": {
+   "1": {
+    "0": {
+     "name": "RootFolder",
+     "value": ""
+    },
+    "1": {
+     "name": "Application",
+     "value": ""
+    },
+    "2": {
+     "name": "ParamCount",
+     "value": ""
+    },
+    "3": {
+     "name": "Parameters",
+     "value": []
+    }
+   },
+   "2": {
+    "0": {
+     "name": "Skill",
+     "value": "36287390",
+     "description": "36287390 - Meridian-AgenticCopilot-Skill"
+    },
+    "1": {
+     "name": "InitialPriority",
+     "value": "0"
+    },
+    "2": {
+     "name": "HighProficiency",
+     "value": "1"
+    },
+    "3": {
+     "name": "LowProficiency",
+     "value": "20"
+    },
+    "4": {
+     "name": "TargetAgent",
+     "value": ""
+    },
+    "5": {
+     "name": "RoutingAttribute",
+     "value": ""
+    },
+    "6": {
+     "name": "PriorityManagement",
+     "value": ""
+    },
+    "7": {
+     "name": "Acceleration",
+     "value": ""
+    },
+    "8": {
+     "name": "MaxPriority",
+     "value": ""
+    }
+   },
+   "3": {
+    "0": {
+     "name": "Data",
+     "value": "ASSIGN global:__AgentId = \"{AGENTID}\"\r\n"
+    },
+    "1": {
+     "name": "MaxStringSize",
+     "value": "Limit2K"
+    }
+   },
+   "6": {
+    "0": {
+     "name": "assistLaunchConfigName",
+     "value": "Meridian_Agentic_Copilot_Profile_2"
+    },
+    "1": {
+     "name": "actionRestUrl",
+     "value": ""
+    },
+    "2": {
+     "name": "AgentId",
+     "value": ""
+    },
+    "3": {
+     "name": "AgentUUId",
+     "value": ""
+    },
+    "4": {
+     "name": "AgentAssistMasterId",
+     "value": ""
+    },
+    "5": {
+     "name": "BotExchangeVersion",
+     "value": ""
+    },
+    "6": {
+     "name": "scriptParams",
+     "value": ""
+    }
+   },
+   "7": {
+    "0": {
+     "name": "SkillID",
+     "value": "SKLID"
+    },
+    "1": {
+     "name": "SkillName",
+     "value": "SKLNAME"
+    },
+    "2": {
+     "name": "AgentFirstName",
+     "value": "FIRST"
+    },
+    "3": {
+     "name": "AgentLastName",
+     "value": "LAST"
+    },
+    "4": {
+     "name": "UserID",
+     "value": "USERID"
+    },
+    "5": {
+     "name": "AgentID",
+     "value": "AGENTID"
+    },
+    "6": {
+     "name": "PriorAgentFirstName",
+     "value": "PRIORFIRST"
+    },
+    "7": {
+     "name": "PriorAgentLastName",
+     "value": "PRIORLAST"
+    },
+    "8": {
+     "name": "PriorUserID",
+     "value": "PRIORUSERID"
+    },
+    "9": {
+     "name": "PriorAgentID",
+     "value": "PRIORAGENTID"
+    },
+    "10": {
+     "name": "IsTransfer",
+     "value": "ISTRANSFER"
+    }
+   },
+   "9": {
+    "0": {
+     "name": "ContactId",
+     "value": "{contactid}"
+    },
+    "1": {
+     "name": "ContactCustomFields",
+     "value": "ContactCustomFields"
+    },
+    "2": {
+     "name": "CustomerCustomFields",
+     "value": "CustomerCustomFields"
+    },
+    "3": {
+     "name": "CustomerFingerprint",
+     "value": "CustomerFingerprint"
+    },
+    "4": {
+     "name": "DigitalContactStatus",
+     "value": "DigitalContactStatus"
+    },
+    "5": {
+     "name": "AbandonStatus",
+     "value": "AbandonStatus"
+    }
+   },
+   "10": {
+    "0": {
+     "name": "connectName",
+     "value": "Meridian RTI Test Connection"
+    },
+    "1": {
+     "name": "returnHeaders",
+     "value": ""
+    },
+    "2": {
+     "name": "authBodyVarName",
+     "value": "authBody"
+    },
+    "3": {
+     "name": "authProxyVarName",
+     "value": "authProxy"
+    },
+    "4": {
+     "name": "authHeadersListVarName",
+     "value": "authHeadersList"
+    },
+    "5": {
+     "name": "authErrorDetailsVarName",
+     "value": "authErrorDetails"
+    },
+    "6": {
+     "name": "actionRestUrl",
+     "value": ""
+    }
+   },
+   "12": {
+    "0": {
+     "name": "Data",
+     "value": "// ---- Map values into globals (must be set BEFORE ReqAgent) ----\r\n// Customer NUMBER: 'Get Custom Fields' puts the contact custom fields into 'ContactCustomFields'.\r\n//   'customer_id' sits at .contactCustomFields[1] (ident=customer_id). The index is POSITIONAL -\r\n//   re-check it in a trace if you add more contact custom fields.\r\nASSIGN global:customer_id = \"{ContactCustomFields.contactCustomFields[1].value}\"\r\n// Customer NAME: the pre-chat name is the system var __authorfullname. CXone locks this at chat\r\n// start and it can never change, which is exactly why it is the identity anchor.\r\nASSIGN global:customer_nickname = \"{__authorfullname}\"\r\nASSIGN dbg_customer_id = \"{global:customer_id}\"\r\nASSIGN dbg_nickname    = \"{global:customer_nickname}\"\r\n\r\nIF \"{global:customer_id}\" = \"\"\r\n{\r\n  ASSIGN dbg_ic_status = \"SKIPPED - no customer_id custom field on this contact\"\r\n}\r\nELSE\r\n{\r\n  // ---- Interaction Context payload ----------------------------------------------------\r\n  // Verified live 2026-08-06: timestamp is REQUIRED (presence, not freshness); contactNumber\r\n  // may be a string; tenantId is OPTIONAL (resolved from the bearer) so it is not sent.\r\n  // contextData stays NESTED - its keys surface as input.data['copilot-customer-context'].*\r\n  DYNAMIC params\r\n  ASSIGN params.schemaVersion = \"1.0.0\"\r\n  // real timestamp via documented SNL builtins (now is BU-local; asutc() converts to Zulu);\r\n  // the hardcoded fallback guards an EMPTY interpolation result (API checks presence only).\r\n  ASSIGN nowTime = now\r\n  ASSIGN utcTime = nowTime.asutc()\r\n  ASSIGN params.timestamp = \"{utcTime.asisodatetime()}\"\r\n  IF \"{params.timestamp}\" = \"\"\r\n  {\r\n    ASSIGN params.timestamp = \"2026-08-06T18:00:00Z\"\r\n  }\r\n  ASSIGN params.contactNumber = \"{contactid}\"\r\n  ASSIGN params.contextData.customer_id = \"{global:customer_id}\"\r\n  ASSIGN params.contextData.customer_nickname = \"{global:customer_nickname}\"\r\n  ASSIGN paramsjson = \"{params.asjson()}\"\r\n\r\n  // ---- Bearer token from Connect Auth --------------------------------------------------\r\n  // NO CREDENTIALS IN THIS SCRIPT: Connect Auth mints the token from the Integration Hub\r\n  // connection. authBody wraps the auth response one level deep - the confirmed path is\r\n  // authBody.responseContent.access_token (source: Medallia Mindful x CXone integration\r\n  // guide, the one public production ConnectAuth script). Fallback probes cover tenant /\r\n  // version drift; dbg_tok_path records which path actually served the request.\r\n  ASSIGN tok = \"{authBody.responseContent.access_token}\"\r\n  ASSIGN dbg_tok_path = \"authBody.responseContent.access_token\"\r\n  IF \"{tok}\" = \"\"\r\n  {\r\n    ASSIGN tok = \"{authBody.access_token}\"\r\n    ASSIGN dbg_tok_path = \"authBody.access_token (fallback)\"\r\n  }\r\n  IF \"{tok}\" = \"\"\r\n  {\r\n    ASSIGN tok = \"{authBody.ResponseContent.access_token}\"\r\n    ASSIGN dbg_tok_path = \"authBody.ResponseContent.access_token (fallback)\"\r\n  }\r\n  IF \"{tok}\" = \"\"\r\n  {\r\n    ASSIGN dbg_tok_path = \"NONE - expand authBody in the LIVE trace variables panel and report the member names\"\r\n  }\r\n\r\n  // ---- Publish -------------------------------------------------------------------------\r\n  // pre-seeded so a faulted MakeRestRequest still leaves a marker in the trace\r\n  ASSIGN dbg_ic_status = \"REQUEST SENT - no status returned\"\r\n  requestProxy = GetRESTProxy()\r\n  ASSIGN requestAuth = \"Bearer \"\r\n  requestAuth.append(\"{tok}\")\r\n  requestProxy.AddHeader(\"Authorization\", requestAuth)\r\n  requestProxy.ContentType = \"application/json\"\r\n  customEndpointURL = \"https://api-na1.niceincontact.com/eai-real-time-insight/v1/interaction-context\"\r\n  customRequest = requestProxy.MakeRestRequest(customEndpointURL, paramsjson, 0, \"POST\")\r\n  // a REAL status code in the trace - silent success is what hid the ConnectRequest failure\r\n  ASSIGN dbg_ic_status = requestProxy.statusCode\r\n\r\n  // scrub token material so an exported trace can be shared safely\r\n  ASSIGN tok = \"(scrubbed)\"\r\n  ASSIGN requestAuth = \"(scrubbed)\"\r\n  ASSIGN authBody = \"(scrubbed)\"\r\n}\r\n"
+    },
+    "1": {
+     "name": "MaxStringSize",
+     "value": "Limit32K"
+    }
+   }
+  },
+  "branches": {
+   "1": [
+    {
+     "to": 9,
+     "label": "",
+     "type": "default",
+     "labelDistance": null,
+     "index": 0,
+     "ports": "r,l",
+     "lineType": "straight",
+     "elbows": []
+    }
+   ],
+   "3": [
+    {
+     "to": 6,
+     "label": "",
+     "type": "default",
+     "labelDistance": null,
+     "index": 0,
+     "ports": "r,l",
+     "lineType": "straight",
+     "elbows": []
+    }
+   ],
+   "7": [
+    {
+     "to": 3,
+     "label": "",
+     "type": "default",
+     "labelDistance": null,
+     "index": 0,
+     "ports": "r,l",
+     "lineType": "straight",
+     "elbows": []
+    }
+   ],
+   "9": [
+    {
+     "to": 10,
+     "label": "",
+     "type": "default",
+     "labelDistance": null,
+     "index": 0,
+     "ports": "r,l",
+     "lineType": "straight",
+     "elbows": []
+    }
+   ],
+   "10": [
+    {
+     "to": 12,
+     "label": "",
+     "type": "default",
+     "labelDistance": null,
+     "index": 0,
+     "ports": "r,l",
+     "lineType": "straight",
+     "elbows": []
+    }
+   ],
+   "12": [
+    {
+     "to": 2,
+     "label": "",
+     "type": "default",
+     "labelDistance": null,
+     "index": 0,
+     "ports": "r,l",
+     "lineType": "straight",
+     "elbows": []
+    }
+   ]
+  },
+  "isDataLoaded": true,
+  "isDataLoading": false,
+  "isDataSaving": false,
+  "isNewScript": false,
+  "isViewOnlyMode": false,
+  "isLockOverride": false,
+  "isVersionHistoryMode": false,
+  "dataLoadingProgress": {
+   "key": "reset"
+  },
+  "error": null,
+  "issues": {
+   "totalErrors": "0",
+   "totalWarnings": "0",
+   "actions": {},
+   "script": {}
+  },
+  "startTraceOptions": {
+   "skill": "",
+   "skillDescription": "",
+   "simulateInboundCall": false,
+   "phone": "",
+   "dnis": "",
+   "ani": "",
+   "simulateDateTime": false,
+   "dateTime": null,
+   "timezone": "(Business Unit Default)",
+   "parameters": []
+  },
+  "versionHistory": null,
+  "scriptVersions": {},
+  "lastVersionEdited": null,
+  "traceWindowCount": 1,
+  "variables": {
+   "agentid": [
+    {
+     "name": "Snippet",
+     "label": "Set AgentID",
+     "shape": {
+      "type": "rectangle-editor",
+      "icon": {
+       "color": "#CCCC00",
+       "url": "#code"
+      },
+      "editorIcon": {
+       "url": "#browser"
+      },
+      "width": 128,
+      "height": 80
+     },
+     "actionId": 3
+    }
+   ],
+   "contactid": [
+    {
+     "name": "Get Custom Fields",
+     "label": "",
+     "shape": {
+      "icon": {
+       "color": "#B62B6A",
+       "url": "#field-down"
+      },
+      "type": "rectangle",
+      "width": 128,
+      "height": 32
+     },
+     "actionId": 9
+    }
+   ]
+  },
+  "compareScript": {},
+  "customConnectorIdentifier": null,
+  "schemaVersion": "1.0.0"
+ }
+}

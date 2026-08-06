@@ -27,9 +27,15 @@ scenarios already scoped before writing one from scratch.
   `MERIDIAN_API_BASE` (env var) and refuses to build without it; `tile/meridian_tile.js` derives its
   own base from wherever it was loaded. Don't reintroduce a hardcoded URL — that's what put a
   teammate's test clicks against someone else's live server in an earlier version of this repo.
+  *Carve-out:* CXone **platform** API hosts (e.g. `api-na1.niceincontact.com` in the bundled
+  Studio script) are region constants, not demo backends — CXONE_SETUP.md tells cloners to edit
+  the region. The rule protects against pointing at somebody's server, not against naming NICE's.
 - **Real data or a visible error — never a fallback or invented value.** If a data source isn't
   configured or a call fails, render the honest error state; don't have the tile or the flow make
-  up a plausible-looking substitute.
+  up a plausible-looking substitute. *One sanctioned exception:* the `cust_101` demo-default
+  identity — a REAL CRM record, loaded only when no identify signal exists, and ALWAYS branded by
+  the red `DEMO FALLBACK` provenance strip (ARCHITECTURE.md §2a). Removing the strip, or defaulting
+  without it, violates this rule.
 - **Deterministic ids on re-import.** Changing a node's id breaks the "delete old flow, re-import"
   safety this package is built around — see the re-import gotcha in `docs/CXONE_SETUP.md`.
 

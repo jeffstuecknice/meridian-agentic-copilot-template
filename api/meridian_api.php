@@ -139,7 +139,10 @@ switch ($action) {
 
   case 'get_customer': {
     $rec = meridian_lookup(val($P, 'customer_id', ''), val($P, 'name', ''));
-    if (!$rec) fail('customer not found', 404);
+    // A miss answers HTTP 200 + ok:false, NOT 404: Cognigy's httpRequest node (abortOnError
+    // false) stores an error wrapper on 4xx instead of the body, which hides the definitive
+    // "customer not found" signal the flow's bad-id latch needs (verified 2026-08-06).
+    if (!$rec) out(['ok' => false, 'action' => 'get_customer', 'error' => 'customer not found']);
     // ALIAS KEYS: Cognigy context storage masks PII-ish VALUES (phone etc.) on stored
     // OBJECTS — ship the same values under neutral names; the flow also keeps the record
     // as a JSON STRING, which survives masking intact.

@@ -70,6 +70,19 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
 
 /* ---------- profile header (navy brand panel) ---------- */
 .mcard.hd{padding:0;overflow:hidden;background:var(--navy-grad);border-color:#123055;color:#fff}
+/* provenance strip — says where this record came from; a fallback must never read as a real hit */
+.hd-prov{display:flex;align-items:flex-start;gap:7px;padding:6px 14px;
+  font:700 9.5px/1.35 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.hd-prov i{width:6px;height:6px;border-radius:999px;flex:0 0 auto;margin-top:3px}
+/* the identify inputs that produced this verdict — lower case, quieter, always factual */
+.hd-prov b{display:block;margin-top:3px;font-weight:400;opacity:.7;
+  text-transform:none;letter-spacing:.02em;white-space:pre-wrap}
+.hd-prov.ok{background:rgba(74,222,128,.13);color:#8FE9AF;box-shadow:inset 0 -1px 0 rgba(74,222,128,.22)}
+.hd-prov.ok i{background:#4ADE80}
+.hd-prov.bad{background:rgba(248,113,113,.20);color:#FFD2D2;box-shadow:inset 0 -1px 0 rgba(248,113,113,.35)}
+.hd-prov.bad i{background:#F87171;animation:provPulse 1.5s ease-in-out infinite}
+@keyframes provPulse{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.hd-prov.bad i{animation:none}}
 .hd-top{display:flex;align-items:flex-start;gap:11px;padding:14px 14px 4px}
 .hd-avatar{flex:0 0 40px;height:40px;border-radius:50%;background:rgba(255,255,255,.14);
   border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;
@@ -521,7 +534,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
      scrub every string-expected profile field so "[object Object]" never renders. */
   function saneProfile(p) {
     if (!p || typeof p !== 'object') return p;
-    ['initials', 'name', 'nickname', 'tier', 'phone', 'occupation', 'meta', 'rightLabel', 'rightValue']
+    ['initials', 'name', 'nickname', 'tier', 'phone', 'occupation', 'meta', 'rightLabel', 'rightValue',
+      'src', 'srcNote', 'srcDbg']
       .forEach(function (k) {
         if (p[k] != null && typeof p[k] !== 'string') {
           p[k] = (typeof p[k] === 'number') ? String(p[k]) : '';
@@ -747,10 +761,22 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
 
   function sentColor(p) { return p >= 70 ? '#4ADE80' : (p >= 40 ? '#FBBF24' : '#F87171'); }
 
+  /* Only a live CRM match is quiet; every other origin is a fault the agent must see BEFORE
+     they read the record, so it sits above the name rather than among the badges. */
+  var PROV_LIVE = { id: 1, name: 1, chatid: 1 };
+  function htmlProv(p) {
+    if (!has(p.src)) return '';
+    var live = PROV_LIVE[p.src] === 1;
+    return '<div class="hd-prov ' + (live ? 'ok' : 'bad') + '"><i></i>' +
+      '<span>' + esc(p.srcNote || p.src) +
+      (has(p.srcDbg) ? '<b>' + esc(p.srcDbg) + '</b>' : '') + '</span></div>';
+  }
+
   function htmlProfile() {
     var p = saneProfile(S.panel && S.panel.profile);
     if (!p) return '';
     var h = '<div class="mcard hd' + newCard('profile') + '">';
+    h += htmlProv(p);
     h += '<div class="hd-top">' +
       '<div class="hd-avatar">' + esc(p.initials || (p.name || '?').slice(0, 2).toUpperCase()) + '</div>' +
       '<div class="hd-id"><div class="hd-name">' + esc(p.name || '') +

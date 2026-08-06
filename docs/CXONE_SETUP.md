@@ -60,27 +60,44 @@ mounting followed the creation path). Delete such a profile; do not try to save 
 ## Step 3 — the routing chain
 
 1. **Digital skill** for the demo.
-2. **Studio script** — clone `MeridianAgenticCopilot_StudioScript_1` (bundled at the repo root)
-   rather than authoring from a blank canvas — see the bisect rule below for why a proven script
-   beats a fresh one. Minimum shape: `Begin → ReqAgent(skill)`; `OnAssignment → Snippet
-   (ASSIGN global:__AgentId = "{AGENTID}") → Agent Assist action (assistLaunchConfigName =
-   the profile name)`.
+2. **Studio script** — import `MeridianAgenticCopilot_StudioScript.json` (bundled at the repo
+   root) rather than authoring from a blank canvas — see the bisect rule below for why a proven
+   script beats a fresh one. Its real shape (the identity chain must run **before** ReqAgent):
+   `Begin → Get Custom Fields → Connect Auth → Map Context + Publish (Snippet) → ReqAgent(skill)`;
+   `OnAssignment → Set AgentID (ASSIGN global:__AgentId = "{AGENTID}") → Agent Assist action
+   (assistLaunchConfigName = the profile name)`.
 
-   > **Credentials in the bundled script.** The "Map + Publish Context" Snippet calls the
-   > Interaction Context API and needs a CXone API access key. The bundled file has the real key
-   > stripped out — `accessKeyId` and `accessKeySecret` are placeholders
-   > (`YOUR_CXONE_ACCESS_KEY_ID` / `YOUR_CXONE_ACCESS_KEY_SECRET`). Before you can use this snippet:
-   >   - **Generate your own access key** — CXone Admin → Security → API Access (Access Key
-   >     Management) → create a new key scoped to this integration, then paste the id/secret into
-   >     those two `ASSIGN` lines in your cloned script.
-   >   - **More secure, if you know how**: wire the request through **Connections Hub** instead of
-   >     hardcoding the key inline in the script — ask your tenant admin if that's set up for this
-   >     use case.
-   > Never commit a real access key back into this repo — this file is meant to ship with
-   > placeholders only.
-3. **Chat channel** → default skill = the skill, script = the script.
-4. **Guide entry point** → the chat channel.
-5. **Full agent logout/login** after ANY profile or script change. Test on the **first contact
+   > **The script carries NO credentials — by design.** The publish Snippet reads its bearer
+   > token from the **Connect Auth** action, which authenticates via a CXone **Integration Hub**
+   > connection. Never paste an access key into a Studio script: a leaked script leaked the key
+   > (that is this repo's origin story, 2026-08-06).
+3. **Integration Hub connection** (Connections Hub → Integration Hub) — required for the script:
+   1. Create a connection (any display name — e.g. `Meridian RTI Test Connection`), Integration
+      Method **REST**, Authentication Type **OAuth 2.0**.
+   2. **Authentication tab**: URL `https://<region>.nice-incontact.com/authentication/v1/token/access-key`,
+      Method POST, Body `{"accessKeyId": "[[accessKeyId]]", "accessKeySecret": "[[accessKeySecret]]"}`.
+   3. **Variables tab**: add `accessKeyId` / `accessKeySecret` as **secrets** (AES-encrypted,
+      write-only) with a CXone API access key (Admin → Security → API Access). Click **Test
+      Authentication** — expect HTTP 200 with tokens.
+   4. In the imported script, set **Connect Auth → ConnectName** to your connection's **display
+      name** (double-clicking the action opens a picker; note it can wipe neighboring fields —
+      re-check them after).
+   5. The token lives at **`{authBody.responseContent.access_token}`** (undocumented; confirmed
+      against the one public production ConnectAuth script). The Snippet probes fallback paths
+      and records the winner in the `dbg_tok_path` trace variable.
+   6. **ConnectRequest is deliberately NOT used.** On this stack it reports success while
+      delivering nothing (proven by reading the target API back: `404 Key not found`). The
+      Snippet uses `GetRESTProxy()` so `dbg_ic_status` records a **real** HTTP status.
+   7. **Region**: the publish URL in the Snippet is `api-na1.niceincontact.com` — edit both hosts
+      to your tenant's region if you are not on NA1.
+4. **Channel prerequisites for identity**: the chat channel needs a **contact custom field** with
+   ident `customer_id` (the pre-contact survey fills it — e.g. `cust_101` for the bundled Maya
+   Torres scenario), and the pre-chat form must capture the **customer name** (`__authorfullname`
+   is the identity anchor — CXone locks it at chat start). The Snippet reads the custom field
+   POSITIONALLY at `contactCustomFields[1]` — re-check the index in a trace if you add fields.
+5. **Chat channel** → default skill = the skill, script = the script.
+6. **Guide entry point** → the chat channel.
+7. **Full agent logout/login** after ANY profile or script change. Test on the **first contact
    after login** (the known socket bug breaks copilot mounting on later contacts in a session).
 
 ## Fast triage (distilled from the 2026-07-30 debugging day)
@@ -104,6 +121,14 @@ Work DOWN this list — each step assumes the ones above passed:
 4. **Tab mounts, tile errors** → `meridian_tile.js` not deployed / stale: `python tools/deploy_api.py`,
    then Ctrl+F5 in the workspace.
 5. **Copilot never reacts to the agent's words** → `includeAgentUtterances` OFF → step 2.2.
+6. **Customer card shows a red provenance strip on a live contact** → the strip's second line
+   (`published=… chatName=… chatId=… turns=N (json|obj|none)`) says exactly which identify signal
+   is missing. `published=-` → run a Studio **trace** and read `dbg_ic_status` (`SKIPPED` = the
+   contact custom field is empty; `401` = token — check `dbg_tok_path`; `2xx` = publish fine,
+   problem is Cognigy-side). `turns=0 (none)` → the flow package is stale, re-import.
+   `chatName=-` after the customer gave a name → the name missed the CRM (check `ignored=` on
+   the same line for blacklisted probes). ⚠️ Cognigy **Live Logging does not surface `api.log()`
+   from code nodes** on this stack — the panel's own strip IS the diagnostic; don't hunt logs.
 
 ## Known-benign noise (don't chase these)
 
