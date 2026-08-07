@@ -22,6 +22,38 @@ whose tile is fully inline (zero external dependencies):
 The hello tile also proves both directions: an echo row per customer message (flow → tile) and the
 "Send test postback" button (tile → flow).
 
+**Studio side:** import the companion script `MeridianHelloCopilot_StudioScript.json` (repo root)
+rather than authoring one — same minimum shape as the real script minus the identity chain
+(`Begin → Request Agent(skill)`, then on assignment `Set AgentID → Agent Assist`). Set the
+Request Agent's Skill from the dropdown after import; confirm `assistLaunchConfigName` matches
+your Copilot Profile's exact name.
+
+### ✅ Verified live (2026-08-07) — Jeff's working reference config
+
+The full chain below is confirmed live end to end (tile mounts, echoes both customer AND agent
+utterances, test postback round-trips) on tenant B32 / brand `6050`:
+
+| Object | Name |
+|---|---|
+| Cognigy flow | `Meridian_HelloCopilot` |
+| Cognigy webhook endpoint | `MeridianHelloCopilot-CognigyWebhookEndpoint` |
+| CXone Copilot Profile | `MeridianHelloCopilot-CopilotProfile` |
+| Guide entry point | `MeridianHelloCopilot-GuideEntrypoint` |
+
+**How to test it** (no CXone admin access needed beyond a login — this is the same playground
+flow the public setup guide walks through):
+
+1. Go to `aicoe.3ddesignview.com/demo/guide_playground`, enter Brand ID `6050`, **Apply & Reload**.
+2. Expand **Entrypoint ID**, search, select **`MeridianHelloCopilot-GuideEntrypoint`**.
+3. **Test Chat** as the customer.
+4. In CXone Agent Workspace, assign the incoming contact to yourself, open the **Copilot** tab.
+5. Expect the green **"✓ TILE MOUNTED — Meridian Hello Copilot"** banner immediately.
+6. Type a message as the customer, then as the agent — both should produce an echo row in the
+   tile (`helloStr` entries in the App Space log). If only the customer side echoes, the profile's
+   `includeAgentUtterances` reverted — re-run `tools/fix_profile.py MeridianHelloCopilot-CopilotProfile`
+   (this exact profile hit that bug once already; see Step 2 below for the general fix).
+7. Click **Send test postback** in the tile and confirm a matching row appears from the flow side.
+
 ## Step 1 — Cognigy
 
 1. Import `package/Package-Meridian-Copilot.zip` (fresh project) — flow + Command Agent +
