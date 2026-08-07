@@ -459,6 +459,40 @@
         n: 12, label: 'Rehydrate (re-push panel 3 unchanged)',
         note: 'Must NOT flicker, duplicate, re-animate, or reset local state (heard/approved/added steps).',
         run: function () { push('merStateStr', FULL_PANEL); }
+      },
+      {
+        n: 13, label: 'Wrap-Up — session summary (real actions)',
+        note: 'What the flow sends once every beat is done and at least one real action executed — or any time the agent clicks Wrap Up.',
+        run: function () {
+          push('merWrapStr', {
+            ready: true, empty: false,
+            actions: [
+              { action: 'process_return_exception', ref: 'RMA-88214', summary: 'Return accepted — ProDock USB-C docking station · $189 to store credit' },
+              { action: 'apply_credit', ref: 'CR-10387', summary: '$189 credit applied to the order' },
+              { action: 'place_order', ref: 'ORD-51902', summary: 'Aero 14 ordered — total $1,299 · ships today' }
+            ],
+            summary: 'Maya Torres (Summit Circle) reported an incorrectly denied ProDock return; the return was reprocessed under MER-POL-02 §3.1 (RMA-88214) with a $189 credit (CR-10387). She then ordered the Aero 14 (ORD-51902), shipping today.',
+            customerMessage: 'Maya, you’re all set! I’ve reprocessed your ProDock return and applied the $189 credit to your account, and your new Aero 14 is ordered and shipping today. Thanks so much for your patience.',
+            pushedToCrm: false, crmRef: ''
+          });
+        }
+      },
+      {
+        n: 14, label: 'Wrap-Up — nothing done yet (honest empty state)',
+        note: 'Forced via the footer button before any real action executed — no invented recap.',
+        run: function () {
+          push('merWrapStr', { ready: true, empty: true, actions: [], summary: 'No actions have been completed yet in this conversation.', customerMessage: '', pushedToCrm: false, crmRef: '' });
+        }
+      },
+      {
+        n: 15, label: 'CRM push — confirm (simulates the flow’s reply)',
+        note: 'Click "Push to CRM" on the wrap-up card first, THEN run this to simulate the flow confirming.',
+        run: function () { push('merCrmPushStr', { ok: true, noteRef: 'NOTE-3F91A2C8' }); }
+      },
+      {
+        n: 16, label: 'CRM push — failure (honest error, button re-enables)',
+        note: 'Click "Push to CRM" first, then run this instead of #15 to see the failure path.',
+        run: function () { push('merCrmPushStr', { ok: false, error: 'ERROR: CRM logging failed. :: raw={"ok":false,"error":"summary is required"}' }); }
       }
     ];
 

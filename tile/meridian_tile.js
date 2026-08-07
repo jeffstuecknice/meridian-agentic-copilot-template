@@ -5,10 +5,11 @@
  * messages in window.__merBuf); also runs standalone under tile/harness.html.
  *
  * Contract (docs/ARCHITECTURE.md §4/§4a + package/build_meridian.py):
- *   inbound  — merStateStr / merExecStr / merAskStr / merSentStr / merConvoStr / merGreet
+ *   inbound  — merStateStr / merExecStr / merAskStr / merSentStr / merConvoStr / merGreet /
+ *              merWrapStr / merCrmPushStr
  *              (payload at e.data.metadata.<key> OR e.data.<key>; values are JSON
  *              strings that may carry ONE extra escape level — see jparse)
- *   outbound — SDK.postback({action:'boot'|'approve'|'ask'|'command', …})
+ *   outbound — SDK.postback({action:'boot'|'approve'|'ask'|'command'|'wrapup'|'crmpush', …})
  *
  * SECTION MAP
  *   §1  design tokens + stylesheet
@@ -431,7 +432,34 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
 .think-t svg{width:12px;height:12px}
 .think-s{font-size:11.5px;color:var(--ink-3);line-height:1.45;margin-top:3px;transition:opacity .32s ease}
 
-/* ---------- footer (ask / command) ---------- */
+/* ---------- wrap-up card ---------- */
+.mcard.wrap{border-top:3px solid var(--ok)}
+.wrap-hd{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;
+  letter-spacing:.03em;color:var(--ok);margin-bottom:9px}
+.wrap-hd svg{width:13px;height:13px;flex:0 0 auto}
+.wrap-summary{margin:0 0 8px;font-size:12.5px;line-height:1.55;color:var(--ink-2)}
+.wrap-empty{margin:0;font-size:12.5px;color:var(--ink-3);font-style:italic}
+.wrap-actions{margin:0 0 10px;padding:0 0 0 18px;font-size:12px;line-height:1.6;color:var(--ink-2)}
+.wrap-actions li{margin-bottom:2px}
+.wrap-actions b{font-family:var(--mono);color:var(--navy);font-weight:700}
+.wrap-cust{background:var(--ai-bg2);border:1px solid var(--ai-bd);border-radius:9px;
+  padding:9px 11px;margin-bottom:10px}
+.wrap-cust-lab{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ai-deep);margin-bottom:4px}
+.wrap-cust-txt{font-size:12.5px;line-height:1.55;color:var(--ink)}
+.wrap-err{font-size:11.5px;color:var(--err);margin-bottom:8px}
+.wrap-btns{display:flex;gap:8px;flex-wrap:wrap}
+.wrap-btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 13px;
+  border-radius:8px;border:none;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;
+  transition:transform .12s cubic-bezier(.34,1.56,.64,1)}
+.wrap-btn:active{transform:scale(.95)}
+.wrap-btn svg{width:12px;height:12px}
+.wrap-btn.crm{background:var(--navy);color:#fff}
+.wrap-btn.crm[disabled]{opacity:.6;cursor:default}
+.wrap-btn.copy{background:#fff;border:1px solid var(--ai-bd);color:var(--ai-deep)}
+.wrap-btn.done{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok);cursor:default}
+
+/* ---------- footer (ask / command / wrap up) ---------- */
 .mer-foot{flex:0 0 auto;display:flex;gap:7px;padding:9px 12px;background:#fff;border-top:1px solid var(--bd)}
 .mer-foot input{flex:1;min-width:0;height:32px;border:1px solid var(--bd);border-radius:8px;
   padding:0 11px;font-size:12px;font-family:inherit;color:var(--ink);outline:none;background:var(--page)}
@@ -443,6 +471,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
 .foot-btn svg{width:12px;height:12px}
 .foot-btn.ask{background:var(--ai);color:#fff}
 .foot-btn.cmd{background:var(--navy);color:#fff}
+.foot-btn.wrap{background:#fff;border:1px solid var(--bd);color:var(--ink-2)}
+.foot-btn.wrap[disabled]{opacity:.55;cursor:default}
 
 /* ---------- greet toast ---------- */
 .greet{position:absolute;left:10px;right:10px;top:10px;z-index:30;display:flex;gap:9px;
@@ -556,7 +586,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     asks: [],         // [{askId,q,status,a,added,err}]
     cmds: [],         // [{id,cmd,status,exec,err}] — command-bar jobs
     added: [],        // locally added talk beats (Add to steps)
-    stages: []        // live brain-run stages from merStageStr [{n,total,label}]
+    stages: [],       // live brain-run stages from merStageStr [{n,total,label}]
+    wrap: null         // wrap-up card from merWrapStr {ready,empty,actions,summary,customerMessage,pushedToCrm,crmRef}
   };
   var OV = {};        // per-beat overlay: {done,declined,heardHold,foldNow,confirmed,running,runIdx,exec,error,execSettled,copied,toldDone}
   var CP = {};        // copy-text registry, rebuilt every render (key → exact text)
@@ -731,7 +762,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   foot.innerHTML =
     '<input id="mer-in" type="text" placeholder="Ask the AI Agent a question… or tell it what to do" autocomplete="off">' +
     '<button type="button" class="foot-btn ask" data-act="ask-send">' + IC_SPARK + 'Ask</button>' +
-    '<button type="button" class="foot-btn cmd" data-act="cmd-send">' + IC_BOLT + 'Command</button>';
+    '<button type="button" class="foot-btn cmd" data-act="cmd-send">' + IC_BOLT + 'Command</button>' +
+    '<button type="button" class="foot-btn wrap" data-act="wrap-send" title="Summarize this conversation now">' + IC_CHK + 'Wrap Up</button>';
   app.appendChild(scroll); app.appendChild(foot);
   host.appendChild(app);
 
@@ -1241,6 +1273,54 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     return h;
   }
 
+  /* Wrap-up card — a recap of the WHOLE session, a "Push to CRM" button (real, logged), and a
+     "Copy for customer" button (the customerMessage text, via the generic copy-btn registry).
+     REAL DATA OR ERROR: w.empty means the flow itself found nothing real to summarize yet —
+     rendered as an honest note, never a plausible-looking invented recap. */
+  function htmlWrapup() {
+    var w = S.wrap;
+    if (!w || !w.ready) return '';
+    var actions = w.actions || [];
+    var body;
+    if (w.empty) {
+      body = '<p class="wrap-empty">Nothing has been completed yet in this conversation.</p>';
+    } else {
+      body = '<p class="wrap-summary">' + esc(w.summary || '') + '</p>';
+      if (actions.length) {
+        body += '<ul class="wrap-actions">' + actions.map(function (a) {
+          return '<li>' + esc(a.summary || a.action || 'Action') +
+            (has(a.ref) ? ' <b>' + esc(a.ref) + '</b>' : '') + '</li>';
+        }).join('') + '</ul>';
+      }
+      if (has(w.customerMessage)) {
+        CP['wrap-cust'] = w.customerMessage;
+        body += '<div class="wrap-cust"><div class="wrap-cust-lab">Ready to paste to the customer</div>' +
+          '<div class="wrap-cust-txt">' + esc(w.customerMessage) + '</div></div>';
+      }
+    }
+    var btns = '';
+    if (!w.empty) {
+      if (w.pushedToCrm) {
+        btns += '<button type="button" class="wrap-btn done" disabled>' + IC_CHK +
+          'Logged to CRM' + (has(w.crmRef) ? ' · ' + esc(w.crmRef) : '') + '</button>';
+      } else {
+        btns += '<button type="button" class="wrap-btn crm" data-act="wrap-push"' +
+          (w.pushing ? ' disabled' : '') + '>' +
+          (w.pushing ? '<span class="sp" style="width:11px;height:11px;border-width:2px"></span>Logging…'
+            : IC_DOC + 'Push to CRM') + '</button>';
+      }
+      if (has(w.customerMessage)) {
+        btns += '<button type="button" class="wrap-btn copy" data-act="copy" data-key="wrap-cust">' +
+          IC_COPY + 'Copy for customer</button>';
+      }
+    }
+    var err = has(w.pushError) ? '<div class="wrap-err">' + esc(w.pushError) + '</div>' : '';
+    return '<div class="mcard wrap' + newCard('wrap') + '">' +
+      '<div class="wrap-hd">' + IC_CHK + 'Wrap-Up Summary</div>' +
+      body + err + (btns ? '<div class="wrap-btns">' + btns + '</div>' : '') +
+      '</div>';
+  }
+
   /* Before the first merStateStr: skeleton + "reviewing the conversation". */
   function htmlBootSkeleton() {
     return '<div class="mcard' + newCard('boot') + '"><div class="boot">' + IC_EAR +
@@ -1295,7 +1375,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       S.added.map(function (b) { return b.id; }),
       OV,
       [HERO.sig, HERO.state, HERO.url, HERO.err, HERO.showPrompt, HERO.revs.length],
-      S.stages
+      S.stages,
+      S.wrap && [S.wrap._sig, S.wrap.pushedToCrm, S.wrap.pushing, S.wrap.pushError]
     ]);
   }
 
@@ -1319,6 +1400,7 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       h += htmlComparison();
       h += htmlDraft();
       h += htmlAsks();
+      h += htmlWrapup();
     }
     var keep = scroll.scrollTop;
     /* the hero-redraw input must survive rebuilds mid-typing */
@@ -1429,6 +1511,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       return;
     }
     if (act === 'greet-dismiss') { dismissGreet(); return; }
+    if (act === 'wrap-send') { requestWrapup(); return; }
+    if (act === 'wrap-push') { pushToCrm(); return; }
   });
 
   document.getElementById('mer-in').addEventListener('keydown', function (e) {
@@ -1723,6 +1807,62 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
     render();
   }
 
+  var _wrapWatchdog = null;
+  function onWrap(w) {
+    if (!w || typeof w !== 'object') return;
+    _wrapRequesting = false;
+    var wsig = JSON.stringify(w);
+    if (S.wrap && S.wrap._sig === wsig) return;   // idempotent replay guard
+    w._sig = wsig;
+    /* a push confirmation must never regress — a re-trigger (manual "Wrap Up") re-summarizes
+       the session but must not un-log an already-logged card */
+    if (S.wrap && S.wrap.pushedToCrm && !w.pushedToCrm) { w.pushedToCrm = true; w.crmRef = S.wrap.crmRef; }
+    S.wrap = w;
+    render(true);
+  }
+
+  var _wrapRequesting = false;
+  function requestWrapup() {
+    if (_wrapRequesting) return;
+    _wrapRequesting = true;
+    if (!postback({ action: 'wrapup' })) {
+      _wrapRequesting = false;
+      S.cmds.push({ id: 'err-' + (++_cmdSeq), cmd: 'Wrap Up', status: 'error', err: 'ERROR: no connection to the flow — nothing was requested.' });
+      render();
+      return;
+    }
+    render(true);
+    setTimeout(function () { if (_wrapRequesting) { _wrapRequesting = false; render(true); } }, 15000);
+  }
+
+  function pushToCrm() {
+    if (!S.wrap || S.wrap.empty || S.wrap.pushing || S.wrap.pushedToCrm) return;
+    S.wrap.pushError = '';
+    if (!postback({ action: 'crmpush', summary: S.wrap.summary })) {
+      S.wrap.pushError = 'ERROR: no connection to the flow — nothing was logged.';
+      render(true);
+      return;
+    }
+    S.wrap.pushing = true;
+    render(true);
+    clearTimeout(_wrapWatchdog);
+    _wrapWatchdog = setTimeout(function () {
+      if (S.wrap && S.wrap.pushing) {
+        S.wrap.pushing = false;
+        S.wrap.pushError = 'ERROR: no confirmation arrived from CRM systems (20s) — nothing is confirmed logged.';
+        render(true);
+      }
+    }, 20000);
+  }
+  function onCrmPush(x) {
+    if (!x || typeof x !== 'object' || !S.wrap) return;
+    clearTimeout(_wrapWatchdog);
+    S.wrap.pushing = false;
+    if (x.ok) { S.wrap.pushedToCrm = true; S.wrap.crmRef = x.noteRef || ''; S.wrap.pushError = ''; }
+    else { S.wrap.pushError = String(x.error || 'ERROR: CRM logging failed.'); }
+    render(true);
+  }
+
   /* ======================================================================
      §13 INBOUND MESSAGES
      ====================================================================== */
@@ -1875,6 +2015,8 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
       ing(src, 'merConvoStr', function (v) { onConvo(jparse(v)); });
       ing(src, 'merStageStr', function (v) { onStage(jparse(v)); });
       ing(src, 'merGreet', function (v) { onGreet(typeof v === 'string' ? v : String(v)); });
+      ing(src, 'merWrapStr', function (v) { onWrap(jparse(v)); });
+      ing(src, 'merCrmPushStr', function (v) { onCrmPush(jparse(v)); });
     });
   }
   function ing(src, key, fn) {

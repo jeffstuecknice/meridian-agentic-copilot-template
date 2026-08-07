@@ -130,14 +130,18 @@ comparison in hand.
   | `merStageStr` | `{n, total, label}` | REAL brain-run boundaries (gate done → policy read w/ actual section count → composing) — the tile's "AI Agent is working" strip; cleared when the composed panel lands |
   | `merConvoStr` | `{transcript:[{role,text}], customer:{customer_id,nickname}}` | every message turn |
   | `merGreet` | a suggested instant-greeting string | pre-panel turns only (before the first panel) |
+  | `merWrapStr` | `{ready, empty, actions:[{action,ref,summary}], summary, customerMessage, pushedToCrm, crmRef}` | auto, once every beat is `done` and ≥1 real action executed — or any time via the footer's Wrap Up button (§4a below) |
+  | `merCrmPushStr` | `{ok, noteRef, error?}` | after the wrap-up card's "Push to CRM" button |
 
 - **Tile → flow:** official `SDK.postback(payload)` — arrives as
   `input.data._cognigy._agentAssist = {type:'submit', payload}`; the ROUTER switches on
-  `payload.action`. The three routed payloads: `{action:'approve', recId, exec:{actions:[{action,
+  `payload.action`. The routed payloads: `{action:'approve', recId, exec:{actions:[{action,
   params}]}}` (echo the beat's exec block verbatim), `{action:'ask', query, askId?}`,
-  `{action:'command', command}`. `{action:'boot'}` deliberately has no router case — it rides the
-  default chain so rehydrate + the briefing run on tile mount. Inline `onclick` handlers fail in the
-  tile sandbox — wire with `addEventListener` only.
+  `{action:'command', command}`, `{action:'wrapup'}` (footer button — forces the wrap-up card
+  regardless of the auto gate), `{action:'crmpush', summary}` (wrap-up card's Push-to-CRM button —
+  echoes the card's own summary text, a direct parameterized call, no LLM). `{action:'boot'}`
+  deliberately has no router case — it rides the default chain so rehydrate + the briefing run on
+  tile mount. Inline `onclick` handlers fail in the tile sandbox — wire with `addEventListener` only.
 
 ### 4a. Panel object (what `merStateStr` carries)
 
@@ -180,6 +184,32 @@ composer prompt in `package/build_meridian.py` is the authoritative field-by-fie
   within the playbook) — rehydrates never replay the entrance.
   Static product shots (`img/aero14.png`, `img/titan16.png`) render at the top of each product card
   independently of this.
+
+### 4b. Wrap-up card (`merWrapStr`) — added 2026-08-07
+
+Two independent triggers, one shared build path:
+- **Auto** — `WRAP_GATE` (a code node, reached right after any successful panel push) checks
+  every `recommendations[].status==='done'` AND at least one real action has executed
+  (`merExecLogJson` non-empty) AND it hasn't already fired this session (`merWrapShown`). All
+  three deterministic, no LLM judgment call on "are we finished."
+- **Forced** — the tile's footer "Wrap Up" button posts `{action:'wrapup'}`; a dedicated router
+  case clears `merWrapShown` and skips the gate entirely — the agent asked, so build it now.
+
+Both converge on the same `WRAP_PREP → WRAP_LLM → WRAP_PARSE` chain. `merExecLogJson` is the
+single accumulator both the Approve path (`X_RES_CODE`) and the Command Agent path
+(`CM_FIN_CODE`) push every successful action into across the WHOLE session — the wrap-up's
+factual action list is built from this, CODE, never from an LLM guess. The mini LLM
+(`WRAP_LLM`) writes exactly two prose fields (`summary` — internal CRM tone; `customerMessage` —
+warm first-person, ready to paste into chat) grounded ONLY in that action list. **REAL DATA OR
+ERROR enforced in code, not by trusting the prompt:** `WRAP_PARSE` discards the LLM's prose
+outright whenever the action list is empty, substituting an honest "nothing has been completed
+yet" — a forced wrap-up with nothing done yet can never fabricate a plausible-sounding recap.
+
+"Push to CRM" is deliberately NOT an LLM tool call — the card already carries the exact summary
+text the agent is confirming, so it's a direct parameterized `log_case_summary` call (same shape
+as Approve's `execute_batch`, minus the whitelist since the tile itself built the payload) and a
+real reference comes back (`NOTE-…`, `meridian_api.php`). "Copy for customer" is pure client-side
+clipboard, no round-trip — copying text needs no server confirmation.
 - The tile is a **pure data-driven display**. It never reasons and never calls LLMs; its one outbound
   call executes the composer's image brief verbatim (display work — the thinking already happened in
   the flow), and it renders whatever the flow sends. It renders only in real CXone Agent Workspace (not Cognigy's Interaction Panel — the

@@ -96,6 +96,7 @@ FLOW_REF  = det_uuid(PFX + '_flow')
 # ── node ids ──
 START   = NID('0001'); ROUTER = NID('0002')
 C_APPR  = NID('0003'); C_ASK  = NID('0004'); C_CMD = NID('0005'); DEF_R = NID('0006')
+C_WRAP  = NID('0007'); C_CRM  = NID('0008')
 # approve (deterministic execute)
 X_MAP = NID('0110'); X_SW = NID('0111'); X_GO = NID('0112'); X_BAD = NID('0113')
 X_HTTP = NID('0114'); X_RES = NID('0115'); X_SEND = NID('0116')
@@ -130,6 +131,13 @@ CMP_P = NID('0190'); CMP = NID('0191'); MERGE = NID('0192'); PUSH_SW = NID('0193
 PS_PUSH = NID('0194'); PS_DEF = NID('0195'); PUSH = NID('0196')
 CMP2 = NID('0197'); MERGE2 = NID('0198'); PUSH_SW2 = NID('0199')
 PS2_PUSH = NID('019a'); PS2_DEF = NID('019b'); PUSH2 = NID('019c')
+
+# wrap-up card — auto (post-push gate, from PUSH/PUSH2) + forced (manual button) converge on WRAP_PREP
+WRAP_GATE = NID('01c1'); WRAP_SW = NID('01c2'); WRAP_GO = NID('01c3'); WRAP_SKIP = NID('01c4')
+WRAP_FORCE = NID('01c5')
+WRAP_PREP = NID('01c6'); WRAP_LLM = NID('01c7'); WRAP_PARSE = NID('01c8'); WRAP_SEND = NID('01c9')
+# push-to-CRM button — deterministic, no LLM (the card already carries the text to log)
+CRM_PUSH_MAP = NID('01ca'); CRM_PUSH_HTTP = NID('01cb'); CRM_PUSH_RES = NID('01cc'); CRM_PUSH_SEND = NID('01cd')
 
 # Command Agent tool node pairs (tool + map)
 CMD_TOOLS_IDS = {
@@ -823,6 +831,16 @@ X_RES_CODE = (
     "    out.narration='Executed '+out.executed.length+' action'+(out.executed.length>1?'s':'')+' with '+(context.merBrand||'Northlight')+' systems.';\n"
     "  }\n"
     "}\n"
+    # WRAP-UP ACCUMULATOR: every real executed action, across the WHOLE session (both the
+    # Approve path here and the Command Agent path in CM_FIN_CODE), lands in the SAME running
+    # log — the wrap-up card's factual action list is built from this, never from an LLM guess.
+    # merExecLogJson is the masking-proof mirror (merExecLog is an array of objects).
+    "if(out.executed.length){\n"
+    "  var wlog=context.merExecLog||[];\n"
+    "  for(var wi=0;wi<out.executed.length;wi++){if(out.executed[wi].ok)wlog.push(out.executed[wi]);}\n"
+    "  api.addToContext('merExecLog',wlog,'simple');\n"
+    "  api.addToContext('merExecLogJson',JSON.stringify(wlog),'simple');\n"
+    "}\n"
     "var es=JSON.stringify(out).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
     "api.addToContext('merExecEsc',es,'simple');\n"
     + ("api.log('[MER][EXEC<] '+out.narration+' :: '+out.executed.map(function(e){return e.action+':'+e.ref;}).join(', '),'info');\n" if DEBUG else ""))
@@ -971,9 +989,114 @@ CM_FIN_CODE = (
     "var out={recId:'command',ok:ex.length>0&&ex.every(function(e){return e.ok;}),\n"
     "  narration:(ex.length?('Executed '+ex.length+' action'+(ex.length>1?'s':'')+' with '+(context.merBrand||'Northlight')+' systems.'):'ERROR: the command produced no executed actions.'),\n"
     "  executed:ex.map(function(e){return {action:e.action,ref:e.ref,ok:e.ok,summary:e.summary,receiptUrl:e.receiptUrl};})};\n"
+    # merExecLog already accumulated across the session (CT_RES_CODE pushes each tool call
+    # onto it) — just keep the wrap-up's JSON mirror current so the same accumulator this
+    # command turn extended is masking-proof to read later.
+    "api.addToContext('merExecLogJson',JSON.stringify(ex),'simple');\n"
     "var es=JSON.stringify(out).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
     "api.addToContext('merExecEsc',es,'simple');\n"
     + ("api.log('[MER][CMD<] '+out.narration,'info');\n" if DEBUG else ""))
+
+
+# ── wrap-up card: a summary + a CRM-push button + a copy-for-customer button ──
+# Trigger: automatic once every recommendation is 'done' AND at least one real action executed
+# (WRAP_GATE, reached after a successful panel push) — OR forced any time via the footer's
+# "Wrap Up" button (WRAP_FORCE, no gating: the agent asked for it, so build it now). Both paths
+# converge on WRAP_PREP. The action LIST is always CODE-built from merExecLogJson (the real
+# accumulator X_RES_CODE/CM_FIN_CODE feed) — the LLM only writes the two prose fields, and
+# WRAP_PARSE throws its output away entirely when there is nothing real to summarize.
+WRAP_GATE_CODE = (
+    "var panel=null;try{panel=JSON.parse(context.merPanelEsc||'null');}catch(e){}\n"
+    "var recs=(panel&&panel.recommendations)||[];\n"
+    "var allDone=recs.length>0;\n"
+    "for(var wi=0;wi<recs.length;wi++){if(recs[wi]&&recs[wi].status!=='done'){allDone=false;break;}}\n"
+    "var wlog=[];try{wlog=JSON.parse(context.merExecLogJson||'[]');}catch(e){}\n"
+    "var hasReal=wlog.length>0;\n"
+    "var already=context.merWrapShown==='1';\n"
+    "api.addToContext('merWrapGo',(allDone&&hasReal&&!already)?'go':'skip','simple');\n"
+    + ("api.log('[MER][WRAP] gate allDone='+allDone+' hasReal='+hasReal+' already='+already,'info');\n" if DEBUG else ""))
+
+WRAP_FORCE_CODE = (
+    # the agent explicitly asked — allow a re-show even if one already fired this session
+    "api.addToContext('merWrapShown','','simple');\n"
+    + ("api.log('[MER][WRAP] forced via footer button','info');\n" if DEBUG else ""))
+
+WRAP_PREP_CODE = (
+    "var wlog=[];try{wlog=JSON.parse(context.merExecLogJson||'[]');}catch(e){}\n"
+    "var rec=null;try{var _rj=JSON.parse(context.merCrmStr||'');if(_rj&&typeof _rj==='object')rec=_rj;}catch(e){}\n"
+    "var actions=wlog.map(function(e){return {action:e.action,ref:e.ref,summary:e.summary};});\n"
+    "api.addToContext('merWrapActionsJson',JSON.stringify(actions),'simple');\n"
+    "api.addToContext('merWrapCustName',(rec&&(rec.nickname||rec.name))||'the customer','simple');\n"
+    + ("api.log('[MER][WRAP] prep actions='+actions.length,'info');\n" if DEBUG else ""))
+
+WRAP_PROMPT = (
+    "You write the wrap-up for a live customer-service chat that just concluded (or is being "
+    "wrapped up early at the agent's request). You are given ONLY the real actions the system "
+    "actually executed this session — never invent a reference number, dollar amount, or "
+    "action that is not listed below.\n\n"
+    "CUSTOMER: {{context.merWrapCustName}}\n"
+    "BRAND: {{context.merBrand}}\n"
+    "ACTIONS ACTUALLY EXECUTED (JSON array, may be empty):\n{{context.merWrapActionsJson}}\n\n"
+    "Reply with STRICT JSON, exactly two fields, no markdown fence:\n"
+    '{"summary": "2-4 sentences, third person, internal CRM case-note tone, cites every '
+    'reference number above verbatim", '
+    '"customerMessage": "2-4 sentences, warm first-person agent voice ready to paste directly '
+    'into the live chat, addresses the customer by name, recaps in plain language what was '
+    'done, mentions reference numbers only if it reads naturally"}\n'
+    "If the actions list is empty, both fields must plainly say nothing has been completed yet "
+    "— do not invent anything to fill the space.")
+
+WRAP_PARSE_CODE = (
+    LLM_XTRACT +
+    "var raw=xtract(context.merWrapRaw);\n"
+    "var w=null;\n"
+    "if(typeof raw==='string'){var s=raw.replace(/^```(?:json)?/m,'').replace(/```\\s*$/m,'').trim();\n"
+    "  try{w=JSON.parse(s);}catch(e){var a1=s.indexOf('{'),b1=s.lastIndexOf('}');\n"
+    "    if(a1>=0&&b1>a1){try{w=JSON.parse(s.slice(a1,b1+1));}catch(e2){}}}}\n"
+    "else if(raw&&typeof raw==='object')w=raw;\n"
+    "var actions=[];try{actions=JSON.parse(context.merWrapActionsJson||'[]');}catch(e){}\n"
+    "var hasReal=actions.length>0;\n"
+    # REAL DATA OR ERROR: the LLM's prose is discarded outright when there is nothing real to
+    # summarize — an honest empty state, never a plausible-sounding invented recap.
+    "var out={ready:true,empty:!hasReal,actions:actions,\n"
+    "  summary:(hasReal&&w&&w.summary)?String(w.summary):'No actions have been completed yet in this conversation.',\n"
+    "  customerMessage:(hasReal&&w&&w.customerMessage)?String(w.customerMessage):'',\n"
+    "  pushedToCrm:false,crmRef:''};\n"
+    "api.addToContext('merWrapShown','1','simple');\n"
+    "var es=JSON.stringify(out).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
+    "api.addToContext('merWrapEsc',es,'simple');\n"
+    + ("api.log('[MER][WRAP] built empty='+out.empty+' actions='+actions.length,'info');\n" if DEBUG else ""))
+
+# push-to-CRM button — deterministic, no LLM: the tile already carries the exact summary text
+# the agent is confirming, so this is a straight parameterized call, same shape as Approve.
+CRM_PUSH_MAP_CODE = (
+    "var aa=(input.data&&input.data._cognigy&&input.data._cognigy._agentAssist)||null;\n"
+    "var p=aa&&aa.payload; if(typeof p==='string'){try{p=JSON.parse(p);}catch(e){p=null;}}\n"
+    "p=p||{};\n"
+    "var rec=null;try{var _rj=JSON.parse(context.merCrmStr||'');if(_rj&&typeof _rj==='object')rec=_rj;}catch(e){}\n"
+    "var cid=(rec&&rec.customer_id)||context.merCid||'';\n"
+    "var summary=String(p.summary||'').slice(0,2000);\n"
+    "var url=summary?('" + MOCK_API + "?action=log_case_summary'):'';\n"
+    "var body=summary?JSON.stringify({customer_id:cid,summary:summary}):'';\n"
+    "api.addToContext('merCrmPushUrl',url,'simple');\n"
+    "api.addToContext('merCrmPushBody',body,'simple');\n"
+    + ("api.log('[MER][CRMPUSH>] cid='+cid+' summaryLen='+summary.length,'info');\n" if DEBUG else ""))
+
+CRM_PUSH_RES_CODE = (
+    "var out={ok:false,noteRef:'',error:''};\n"
+    "if(!context.merCrmPushUrl){\n"
+    "  out.error='ERROR: nothing to log \\u2014 the wrap-up summary was empty.';\n"
+    "}else{\n"
+    "  var raw=context.merCrmPushRaw||{};\n"
+    "  var r=(raw&&typeof raw.result==='object'&&raw.result)?raw.result:((raw&&typeof raw.body==='object'&&raw.body)?raw.body:raw);\n"
+    "  if(typeof r==='string'){try{r=JSON.parse(r);}catch(e){}}\n"
+    "  if(r&&r.ok===true){out.ok=true;out.noteRef=r.noteRef||'';}\n"
+    "  else{var rawSnip='';try{rawSnip=String(JSON.stringify(raw)||'').slice(0,220);}catch(e){rawSnip='(unserializable)';}\n"
+    "    out.error='ERROR: CRM logging failed. :: raw='+rawSnip;}\n"
+    "}\n"
+    "var es=JSON.stringify(out).replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"');\n"
+    "api.addToContext('merCrmPushEsc',es,'simple');\n"
+    + ("api.log('[MER][CRMPUSH<] ok='+out.ok+' ref='+out.noteRef+' err='+out.error,'info');\n" if DEBUG else ""))
 
 
 # ═════════════════════════ config factories ═════════════════════════
@@ -1179,7 +1302,33 @@ def build():
     N.append((C_APPR, node(C_APPR, 'case', 'approve', {'case': {'value': 'approve'}})))
     N.append((C_ASK, node(C_ASK, 'case', 'ask', {'case': {'value': 'ask'}})))
     N.append((C_CMD, node(C_CMD, 'case', 'command', {'case': {'value': 'command'}})))
+    N.append((C_WRAP, node(C_WRAP, 'case', 'wrapup', {'case': {'value': 'wrapup'}})))
+    N.append((C_CRM, node(C_CRM, 'case', 'crmpush', {'case': {'value': 'crmpush'}})))
     N.append((DEF_R, node(DEF_R, 'default', 'Default (message turn)', {})))
+
+    # wrap-up — manual trigger (footer button) forces a (re)build regardless of the auto gate
+    N.append((WRAP_FORCE, code_node(WRAP_FORCE, 'Wrap-up - force rebuild', WRAP_FORCE_CODE)))
+    N.append((WRAP_PREP, code_node(WRAP_PREP, 'Wrap-up - prep grounding data', WRAP_PREP_CODE)))
+    N.append((WRAP_LLM, node(WRAP_LLM, 'llmPromptV2', 'Wrap-up composer (mini)',
+                             llm_cfg(MINI, WRAP_PROMPT, 'merWrapRaw', temp=0.3, max_tokens=500, timeout=20000))))
+    N.append((WRAP_PARSE, code_node(WRAP_PARSE, 'Wrap-up - parse + build card', WRAP_PARSE_CODE)))
+    N.append((WRAP_SEND, node(WRAP_SEND, 'sendData', 'Push wrap-up to tile',
+                              {'tileId': TILE_ID, 'json': '{"merWrapStr":"{{context.merWrapEsc}}"}'})))
+    # wrap-up — automatic gate, reached after any successful panel push (PUSH / PUSH2)
+    N.append((WRAP_GATE, code_node(WRAP_GATE, 'Wrap-up - auto gate', WRAP_GATE_CODE)))
+    N.append((WRAP_SW, node(WRAP_SW, 'switch', 'Wrap-up ready?',
+        {'switch': {'type': 'cognigyScript', 'operator': "context.merWrapGo||'skip'"},
+         'intentLevel': 'input.intent', 'useStrict': ''})))
+    N.append((WRAP_GO, node(WRAP_GO, 'case', 'go', {'case': {'value': 'go'}})))
+    N.append((WRAP_SKIP, node(WRAP_SKIP, 'default', 'skip', {})))
+
+    # push to CRM — deterministic, no LLM (the wrap-up card already carries the text to log)
+    N.append((CRM_PUSH_MAP, code_node(CRM_PUSH_MAP, 'CRM push - map', CRM_PUSH_MAP_CODE)))
+    N.append((CRM_PUSH_HTTP, node(CRM_PUSH_HTTP, 'httpRequest', 'CRM push - log case summary',
+                                  http_post_cfg('{{context.merCrmPushUrl}}', '{{context.merCrmPushBody}}', 'merCrmPushRaw'))))
+    N.append((CRM_PUSH_RES, code_node(CRM_PUSH_RES, 'CRM push - collect ref', CRM_PUSH_RES_CODE)))
+    N.append((CRM_PUSH_SEND, node(CRM_PUSH_SEND, 'sendData', 'Push CRM-log result to tile',
+                                  {'tileId': TILE_ID, 'json': '{"merCrmPushStr":"{{context.merCrmPushEsc}}"}'})))
 
     # approve — LLMs decide; code executes
     N.append((X_MAP, code_node(X_MAP, 'Approve - map action plan', X_MAP_CODE)))
@@ -1375,12 +1524,18 @@ def build():
         rel(START, ONCE),
         rel(ONCE, ROUTER, children=[ONFIRST, AFTERW]),
         rel(ONFIRST, GRID), rel(GRID, TILE), rel(TILE, None), rel(AFTERW, None),
-        rel(ROUTER, None, children=[DEF_R, C_APPR, C_ASK, C_CMD]),
+        rel(ROUTER, None, children=[DEF_R, C_APPR, C_ASK, C_CMD, C_WRAP, C_CRM]),
         # approve
         rel(C_APPR, X_MAP), rel(X_MAP, X_SW),
         rel(X_SW, None, children=[X_GO, X_BAD]),
         rel(X_GO, X_HTTP), rel(X_HTTP, X_RES), rel(X_BAD, X_RES),
         rel(X_RES, X_SEND), rel(X_SEND, None),
+        # wrap-up — forced (manual button) skips the auto gate entirely
+        rel(C_WRAP, WRAP_FORCE), rel(WRAP_FORCE, WRAP_PREP),
+        rel(WRAP_PREP, WRAP_LLM), rel(WRAP_LLM, WRAP_PARSE), rel(WRAP_PARSE, WRAP_SEND), rel(WRAP_SEND, None),
+        # push to CRM — deterministic, no LLM
+        rel(C_CRM, CRM_PUSH_MAP), rel(CRM_PUSH_MAP, CRM_PUSH_HTTP), rel(CRM_PUSH_HTTP, CRM_PUSH_RES),
+        rel(CRM_PUSH_RES, CRM_PUSH_SEND), rel(CRM_PUSH_SEND, None),
         # ask (postback) + gate-question join
         rel(C_ASK, KA_PREP), rel(KA_PREP, KA_KS),
         rel(KA_KS, KA_EXC), rel(KA_EXC, KA_LLM), rel(KA_LLM, KA_PARSE),
@@ -1423,10 +1578,14 @@ def build():
         rel(PL_DEF, CMP_P),
         rel(CMP_P, STG3_S), rel(STG3_S, CMP), rel(CMP, MERGE), rel(MERGE, PUSH_SW),
         rel(PUSH_SW, None, children=[PS_PUSH, PS_DEF]),
-        rel(PS_PUSH, PUSH), rel(PUSH, None),
+        rel(PS_PUSH, PUSH), rel(PUSH, WRAP_GATE),
         rel(PS_DEF, CMP2), rel(CMP2, MERGE2), rel(MERGE2, PUSH_SW2),
         rel(PUSH_SW2, None, children=[PS2_PUSH, PS2_DEF]),
-        rel(PS2_PUSH, PUSH2), rel(PUSH2, None), rel(PS2_DEF, None),
+        rel(PS2_PUSH, PUSH2), rel(PUSH2, WRAP_GATE), rel(PS2_DEF, None),
+        # wrap-up — auto gate (both PUSH and PUSH2 converge here)
+        rel(WRAP_GATE, WRAP_SW),
+        rel(WRAP_SW, None, children=[WRAP_GO, WRAP_SKIP]),
+        rel(WRAP_GO, WRAP_PREP), rel(WRAP_SKIP, None),
     ]
     # per-tool: tool -> map -> shared worker
     for tid, *_rest in CMD_TOOLS:

@@ -43,7 +43,12 @@ Two ready-to-import packages ship in `package/` — no build step required:
    processes the return exception, applies the credit, and places the order — real confirmation
    refs in seconds, zero LLM calls on the execution path (`docs/ARCHITECTURE.md` §1 explains why
    Meridian doesn't need Skyway's separate execute flow).
-7. **Wrap** — SMS receipt link via xApp; knowledge Q&A with "Add to steps" available throughout.
+7. **Receipt** — SMS receipt link via xApp; knowledge Q&A with "Add to steps" available throughout.
+8. **Wrap-Up** — once every beat is done, a summary card appears on its own (or any time via the
+   footer's Wrap Up button): a CRM-note recap of what actually happened, a "Push to CRM" button
+   that logs it for real (`log_case_summary`, a real reference back), and a "Copy for customer"
+   button with a warm, ready-to-paste message the agent relays in chat. Grounded only in real
+   executed actions — an early wrap-up with nothing done yet says so honestly, never invents one.
 
 Full script with characters, transcript, and what-to-look-for: [docs/SCENARIO.md](docs/SCENARIO.md).
 

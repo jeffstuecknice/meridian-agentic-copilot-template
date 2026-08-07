@@ -129,6 +129,17 @@ function run_action($name, $P) {
         'summary'   => val($P, 'summary', ''),
         'contextPublished' => true, 'ts' => date('c')];
 
+    case 'log_case_summary':
+      // The wrap-up card's "Push to CRM" button — writes the case note for real and hands
+      // back a real reference, same as every other action here (no invented confirmation).
+      $summary = (string)val($P, 'summary', '');
+      if ($summary === '') return ['ok' => false, 'action' => 'log_case_summary', 'error' => 'summary is required'];
+      return ['ok' => true, 'action' => 'log_case_summary',
+        'noteRef'    => refnum('NOTE'),
+        'customerId' => val($P, 'customer_id', val($P, 'customerId', '')),
+        'summary'    => $summary,
+        'ts' => date('c')];
+
     default:
       return ['ok' => false, 'action' => (string)$name, 'error' => "unknown action '$name'"];
   }
@@ -187,7 +198,7 @@ switch ($action) {
       $pp['customerId'] = $cid;
       $r = run_action($nm, $pp);
       $ref = '';
-      foreach (['rmaRef','creditRef','orderRef','docRef','handoffId'] as $k) { if (!empty($r[$k])) { $ref = $r[$k]; break; } }
+      foreach (['rmaRef','creditRef','orderRef','docRef','handoffId','noteRef'] as $k) { if (!empty($r[$k])) { $ref = $r[$k]; break; } }
       $executed[] = ['action' => $nm, 'ref' => $ref, 'ok' => ($r['ok'] === true),
                      'detail' => ($r['ok'] === true) ? $r : ['error' => val($r, 'error', 'failed')]];
       if ($r['ok'] !== true) $allOk = false;
@@ -201,7 +212,8 @@ switch ($action) {
   case 'apply_credit':
   case 'place_order':
   case 'send_receipt':
-  case 'escalate_case': {
+  case 'escalate_case':
+  case 'log_case_summary': {
     $r = run_action($action, $P);
     if ($r['ok'] !== true) fail($r['error'], 400);
     out($r);
@@ -211,7 +223,8 @@ switch ($action) {
   case '': {
     out(['ok' => true, 'service' => 'Northlight Electronics Mock API (Meridian)', 'version' => '1.0',
          'actions' => ['get_customer', 'get_products', 'execute_batch', 'process_return_exception',
-                       'apply_credit', 'place_order', 'send_receipt', 'escalate_case', 'ping'],
+                       'apply_credit', 'place_order', 'send_receipt', 'escalate_case',
+                       'log_case_summary', 'ping'],
          'usage' => 'GET|POST meridian_api.php?action=<name>  (JSON body or query params)',
          'ts' => date('c')]);
   }
