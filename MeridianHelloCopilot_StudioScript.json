@@ -1,0 +1,227 @@
+{
+ "scriptContent": {
+  "header": {
+   "scriptName": "Jeff_Stueck\\MeridianHelloCopilot_StudioScript",
+   "busNo": 4611565,
+   "mediaType": 9,
+   "mediaTypeName": "digital",
+   "purposeType": "General",
+   "variableRedaction": "",
+   "nextActionId": 6,
+   "status": "Active",
+   "lastSavedIn": "cxs",
+   "divisionNo": 1,
+   "wasLayoutAlgorithmRun": true
+  },
+  "actions": {
+   "1": {
+    "actionId": 1,
+    "libraryId": "B2F794C5-0232-40E7-9830-76D573BF57D7",
+    "name": "BEGIN",
+    "version": 1,
+    "label": "Begin",
+    "dependencyOrder": "0",
+    "implType": "0",
+    "x": 120,
+    "y": 220,
+    "xws": 120,
+    "yws": 220
+   },
+   "2": {
+    "actionId": 2,
+    "libraryId": "7DA9B743-98F4-4899-A5CE-62C9CD414B5B",
+    "name": "REQAGENT_DIGITAL",
+    "version": 1,
+    "label": "ReqAgent",
+    "dependencyOrder": "1",
+    "implType": "0",
+    "x": 500,
+    "y": 220,
+    "xws": 500,
+    "yws": 220
+   },
+   "3": {
+    "actionId": 3,
+    "libraryId": "B333DA63-33C8-4297-A58A-E9546CF7F0F2",
+    "name": "SNIPPET",
+    "version": 1,
+    "label": "Set AgentID",
+    "dependencyOrder": "2",
+    "implType": "0",
+    "x": 340,
+    "y": 420,
+    "xws": 340,
+    "yws": 420
+   },
+   "4": {
+    "actionId": 4,
+    "libraryId": "CDDC91CC-F363-4E31-A13A-D742A81A68A3",
+    "name": "ONASSIGNMENTCHANGED_DIGITAL",
+    "version": 1,
+    "label": "OnAssignment",
+    "dependencyOrder": "4",
+    "implType": "0",
+    "x": 120,
+    "y": 420,
+    "xws": 120,
+    "yws": 420
+   },
+   "5": {
+    "actionId": 5,
+    "libraryId": "B2AEDEE9-AB1E-4923-9D64-04CEE8118482",
+    "name": "AgentAssistV1_LIBID_b2aedee9-ab1e-4923-9d64-04cee8118482",
+    "version": 1,
+    "label": "Agent Assist",
+    "dependencyOrder": "3",
+    "implType": "1",
+    "x": 560,
+    "y": 420,
+    "xws": 560,
+    "yws": 420
+   }
+  },
+  "properties": {
+   "1": {
+    "0": { "name": "RootFolder", "value": "" },
+    "1": { "name": "Application", "value": "" },
+    "2": { "name": "ParamCount", "value": "" },
+    "3": { "name": "Parameters", "value": [] }
+   },
+   "2": {
+    "0": {
+     "name": "Skill",
+     "value": "",
+     "description": "SET AFTER IMPORT — pick your Hello Copilot skill from the dropdown (e.g. Meridian-HelloCopilot-Skill, Phase 4)"
+    },
+    "1": { "name": "InitialPriority", "value": "0" },
+    "2": { "name": "HighProficiency", "value": "1" },
+    "3": { "name": "LowProficiency", "value": "20" },
+    "4": { "name": "TargetAgent", "value": "" },
+    "5": { "name": "RoutingAttribute", "value": "" },
+    "6": { "name": "PriorityManagement", "value": "" },
+    "7": { "name": "Acceleration", "value": "" },
+    "8": { "name": "MaxPriority", "value": "" }
+   },
+   "3": {
+    "0": {
+     "name": "Data",
+     "value": "ASSIGN global:__AgentId = \"{AGENTID}\"\r\n"
+    },
+    "1": { "name": "MaxStringSize", "value": "Limit2K" }
+   },
+   "4": {
+    "0": { "name": "SkillID", "value": "SKLID" },
+    "1": { "name": "SkillName", "value": "SKLNAME" },
+    "2": { "name": "AgentFirstName", "value": "FIRST" },
+    "3": { "name": "AgentLastName", "value": "LAST" },
+    "4": { "name": "UserID", "value": "USERID" },
+    "5": { "name": "AgentID", "value": "AGENTID" },
+    "6": { "name": "PriorAgentFirstName", "value": "PRIORFIRST" },
+    "7": { "name": "PriorAgentLastName", "value": "PRIORLAST" },
+    "8": { "name": "PriorUserID", "value": "PRIORUSERID" },
+    "9": { "name": "PriorAgentID", "value": "PRIORAGENTID" },
+    "10": { "name": "IsTransfer", "value": "ISTRANSFER" }
+   },
+   "5": {
+    "0": {
+     "name": "assistLaunchConfigName",
+     "value": "Meridian_HelloCopilot_Profile"
+    },
+    "1": { "name": "actionRestUrl", "value": "" },
+    "2": { "name": "AgentId", "value": "" },
+    "3": { "name": "AgentUUId", "value": "" },
+    "4": { "name": "AgentAssistMasterId", "value": "" },
+    "5": { "name": "BotExchangeVersion", "value": "" },
+    "6": { "name": "scriptParams", "value": "" }
+   }
+  },
+  "branches": {
+   "1": [
+    {
+     "to": 2,
+     "label": "",
+     "type": "default",
+     "labelDistance": null,
+     "index": 0,
+     "ports": "r,l",
+     "lineType": "straight",
+     "elbows": []
+    }
+   ],
+   "4": [
+    {
+     "to": 3,
+     "label": "",
+     "type": "default",
+     "labelDistance": null,
+     "index": 0,
+     "ports": "r,l",
+     "lineType": "straight",
+     "elbows": []
+    }
+   ],
+   "3": [
+    {
+     "to": 5,
+     "label": "",
+     "type": "default",
+     "labelDistance": null,
+     "index": 0,
+     "ports": "r,l",
+     "lineType": "straight",
+     "elbows": []
+    }
+   ]
+  },
+  "isDataLoaded": true,
+  "isDataLoading": false,
+  "isDataSaving": false,
+  "isNewScript": false,
+  "isViewOnlyMode": false,
+  "isLockOverride": false,
+  "isVersionHistoryMode": false,
+  "dataLoadingProgress": { "key": "reset" },
+  "error": null,
+  "issues": {
+   "totalErrors": "0",
+   "totalWarnings": "0",
+   "actions": {},
+   "script": {}
+  },
+  "startTraceOptions": {
+   "skill": "",
+   "skillDescription": "",
+   "simulateInboundCall": false,
+   "phone": "",
+   "dnis": "",
+   "ani": "",
+   "simulateDateTime": false,
+   "dateTime": null,
+   "timezone": "(Business Unit Default)",
+   "parameters": []
+  },
+  "versionHistory": null,
+  "scriptVersions": {},
+  "lastVersionEdited": null,
+  "traceWindowCount": 1,
+  "variables": {
+   "agentid": [
+    {
+     "name": "Snippet",
+     "label": "Set AgentID",
+     "shape": {
+      "type": "rectangle-editor",
+      "icon": { "color": "#CCCC00", "url": "#code" },
+      "editorIcon": { "url": "#browser" },
+      "width": 128,
+      "height": 80
+     },
+     "actionId": 3
+    }
+   ]
+  },
+  "compareScript": {},
+  "customConnectorIdentifier": null,
+  "schemaVersion": "1.0.0"
+ }
+}
