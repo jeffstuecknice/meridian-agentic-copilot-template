@@ -74,9 +74,6 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
 .hd-prov{display:flex;align-items:flex-start;gap:7px;padding:6px 14px;
   font:700 9.5px/1.35 var(--mono);letter-spacing:.06em;text-transform:uppercase}
 .hd-prov i{width:6px;height:6px;border-radius:999px;flex:0 0 auto;margin-top:3px}
-/* the identify inputs that produced this verdict — lower case, quieter, always factual */
-.hd-prov b{display:block;margin-top:3px;font-weight:400;opacity:.7;
-  text-transform:none;letter-spacing:.02em;white-space:pre-wrap}
 .hd-prov.ok{background:rgba(74,222,128,.13);color:#8FE9AF;box-shadow:inset 0 -1px 0 rgba(74,222,128,.22)}
 .hd-prov.ok i{background:#4ADE80}
 .hd-prov.bad{background:rgba(248,113,113,.20);color:#FFD2D2;box-shadow:inset 0 -1px 0 rgba(248,113,113,.35)}
@@ -762,14 +759,20 @@ body{font-family:'Geist','Inter Tight','Segoe UI',system-ui,sans-serif;font-size
   function sentColor(p) { return p >= 70 ? '#4ADE80' : (p >= 40 ? '#FBBF24' : '#F87171'); }
 
   /* Only a live CRM match is quiet; every other origin is a fault the agent must see BEFORE
-     they read the record, so it sits above the name rather than among the badges. */
+     they read the record, so it sits above the name rather than among the badges.
+     NOTE: p.srcDbg (the raw published=/chatName=/chatId=/turns= signal snapshot) is
+     intentionally NOT rendered here. It only refreshes when a profile push actually happens
+     (boot/flip/error/composed-panel-landing) - between those it can show a stale or blank
+     snapshot even while the badge itself is accurate, which reads as "broken" to anyone
+     watching (live-observed 2026-08-07). The badge + srcNote sentence below is built from the
+     SAME data at the SAME instant, so it's the reliable confirmation; srcDbg still travels in
+     the payload for real debugging (tile/harness.html, or S.panel.profile.srcDbg in devtools). */
   var PROV_LIVE = { id: 1, name: 1, chatid: 1 };
   function htmlProv(p) {
     if (!has(p.src)) return '';
     var live = PROV_LIVE[p.src] === 1;
     return '<div class="hd-prov ' + (live ? 'ok' : 'bad') + '"><i></i>' +
-      '<span>' + esc(p.srcNote || p.src) +
-      (has(p.srcDbg) ? '<b>' + esc(p.srcDbg) + '</b>' : '') + '</span></div>';
+      '<span>' + esc(p.srcNote || p.src) + '</span></div>';
   }
 
   function htmlProfile() {

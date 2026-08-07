@@ -153,14 +153,20 @@ Work DOWN this list — each step assumes the ones above passed:
 4. **Tab mounts, tile errors** → `meridian_tile.js` not deployed / stale: `python tools/deploy_api.py`,
    then Ctrl+F5 in the workspace.
 5. **Copilot never reacts to the agent's words** → `includeAgentUtterances` OFF → step 2.2.
-6. **Customer card shows a red provenance strip on a live contact** → the strip's second line
-   (`published=… chatName=… chatId=… turns=N (json|obj|none)`) says exactly which identify signal
-   is missing. `published=-` → run a Studio **trace** and read `dbg_ic_status` (`SKIPPED` = the
-   contact custom field is empty; `401` = token — check `dbg_tok_path`; `2xx` = publish fine,
-   problem is Cognigy-side). `turns=0 (none)` → the flow package is stale, re-import.
-   `chatName=-` after the customer gave a name → the name missed the CRM (check `ignored=` on
-   the same line for blacklisted probes). ⚠️ Cognigy **Live Logging does not surface `api.log()`
-   from code nodes** on this stack — the panel's own strip IS the diagnostic; don't hunt logs.
+6. **Customer card shows a red provenance strip on a live contact** → the strip itself only shows
+   the human sentence now (`profile.srcNote` — e.g. "DEMO FALLBACK · no customer was identified");
+   the raw identify-input line (`published=… chatName=… chatId=… turns=N (json|obj|none)`) is
+   deliberately **not rendered** on the card anymore (2026-08-07 — it only refreshes when a
+   profile push happens, so it could show a stale/blank snapshot even on a correct badge, which
+   read as broken). Read it from `profile.srcDbg` in the actual payload instead — open
+   `tile/harness.html`'s event log, or `S.panel.profile.srcDbg` in the workspace's own devtools —
+   and interpret it the same way: `published=-` → run a Studio **trace** and read
+   `dbg_ic_status` (`SKIPPED` = the contact custom field is empty; `401` = token — check
+   `dbg_tok_path`; `2xx` = publish fine, problem is Cognigy-side). `turns=0 (none)` persisting well
+   into a conversation → the flow package is stale, re-import. `chatName=-` after the customer gave
+   a name → the name missed the CRM (check `ignored=` on the same line for blacklisted probes).
+   ⚠️ Cognigy **Live Logging does not surface `api.log()`** from code nodes on this stack — the
+   payload's `srcDbg` field is the diagnostic; don't hunt logs.
 
 ## Known-benign noise (don't chase these)
 

@@ -147,10 +147,18 @@ recommendations:[beats with say/sayDone/detail/running/substeps/exec/policyQuote
 composer prompt in `package/build_meridian.py` is the authoritative field-by-field contract.
 - **`profile.src` / `srcNote` / `srcDbg` — the provenance strip** (§2a). The tile renders a strip
   ABOVE the customer's name: green (`.ok`) for the live sources `id`/`name`/`chatid`, red pulsing
-  (`.bad`) for `default`/`unknown`/`stale`/`error`. `srcNote` is the human sentence; `srcDbg` is
-  the raw identify-input line (`published=… chatName=… chatId=… turns=N (json) ignored=…`) — the
-  panel's own diagnostic, because Cognigy Live Logging does not surface `api.log()` from code
-  nodes on this stack. The deterministic `buildProfile` overwrites the LLM's profile with these
+  (`.bad`) for `default`/`unknown`/`stale`/`error`. `srcNote` is the human sentence rendered on the
+  strip — the confirmation an agent actually sees. `srcDbg` (the raw identify-input line,
+  `published=… chatName=… chatId=… turns=N (json) ignored=…`) travels in the payload but is
+  **NOT rendered** (removed 2026-08-07, live-observed): it only refreshes when a profile push
+  actually happens (boot/flip/error/composed-panel-landing), so between pushes it can show a
+  stale or blank snapshot while the badge itself is accurate — reading as "broken" to anyone
+  watching. `srcNote` is safe to render because `buildProfile` builds it from the SAME data at the
+  SAME instant, so it's never out of sync with the badge color. For real debugging, read
+  `profile.srcDbg` from the payload directly (`tile/harness.html`'s event log, or
+  `S.panel.profile.srcDbg` in devtools) rather than off the live card — Cognigy Live Logging does
+  not surface `api.log()` from code nodes on this stack, so this is still the only diagnostic
+  short of a Live trace. The deterministic `buildProfile` overwrites the LLM's profile with these
   fields on every push; a panel push that omits `profile` keeps the previous card (tile merge).
 - **`comparison.provisional` — the instant product duo.** The pre-panel (zero LLM, ~1 s after boot)
   now carries both catalog laptops as unranked cards (`provisional:true`, "Option A/B" tags, dashed
